@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://vooye.in"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://vooye.in"
+  ),
   title: {
     default: "Vooye | Mirrors, Furniture, and Decor",
     template: "%s | Vooye",
@@ -23,7 +26,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">{children}</body>
