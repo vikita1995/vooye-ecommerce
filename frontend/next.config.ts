@@ -2,8 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
+
   async headers() {
     return [
       {
@@ -34,6 +36,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
   turbopack: {
     rules: {
       "*.css": {
