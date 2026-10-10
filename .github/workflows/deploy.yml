@@ -13,7 +13,6 @@ permissions:
 env:
   PROJECT_ID: vooye-510916
   REGION: asia-south1
-  REPOSITORY: vooye-app
   SERVICE: vooye-frontend
   IMAGE: asia-south1-docker.pkg.dev/vooye-510916/vooye-app/vooye-frontend
 
@@ -31,22 +30,27 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: vooye-marketplace/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: vooye-marketplace
         run: npm ci
 
       - name: Type check
-        working-directory: frontend
+        working-directory: vooye-marketplace
         run: npm run typecheck
 
       - name: Lint
-        working-directory: frontend
+        working-directory: vooye-marketplace
         run: npm run lint
 
       - name: Build Next.js
-        working-directory: frontend
+        working-directory: vooye-marketplace
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: npm run build
 
       - name: Authenticate to Google Cloud
@@ -65,14 +69,22 @@ jobs:
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
       - name: Build container image
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: |
           docker build \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID \
             --tag "${IMAGE}:${GITHUB_SHA}" \
-            ./frontend
+            ./vooye-marketplace
 
       - name: Push container image
-        run: |
-          docker push "${IMAGE}:${GITHUB_SHA}"
+        run: docker push "${IMAGE}:${GITHUB_SHA}"
 
       - name: Deploy to Cloud Run
         run: |
