@@ -1,3 +1,4 @@
+
 # Dependencies
 node_modules/
 **/node_modules/
@@ -15,7 +16,7 @@ dist/
 build/
 coverage/
 
-# Environment files
+# Environment files - never commit real values
 .env
 .env.*
 !.env.example
@@ -37,3 +38,7 @@ Thumbs.db
 *.key
 *.p12
 *.pfx
+
+# Local credentials and service account files
+service-account*.json
+*-service-account*.json
