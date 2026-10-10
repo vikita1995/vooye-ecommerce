@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   RecaptchaVerifier,
@@ -15,6 +15,14 @@ import {
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 
+type ProfileResponse = {
+  customer?: {
+    registration_completed_at?: string | null;
+  };
+  registrationComplete?: boolean;
+  error?: string;
+};
+
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
@@ -24,12 +32,69 @@ export default function AccountPage() {
     useState<ConfirmationResult | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [profileSynced, setProfileSynced] = useState(false);
+
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      setChecking(false);
+      setProfileSynced(false);
+
+      if (!currentUser) {
+        setChecking(false);
+        return;
+      }
+
+      setChecking(true);
+      setMessage("");
+
+      try {
+        const idToken = await currentUser.getIdToken();
+
+        const response = await fetch("/api/customer/profile", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+          cache: "no-store",
+        });
+
+        const result = (await response
+          .json()
+          .catch(() => ({}))) as ProfileResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            result.error || "Unable to synchronize your customer profile."
+          );
+        }
+
+        setProfileSynced(true);
+
+        if (result.registrationComplete) {
+          setMessage("You're signed in and your customer profile is ready.");
+        } else {
+          setMessage(
+            "You're signed in. Complete your customer details before checkout."
+          );
+        }
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? `Signed in, but profile synchronization failed: ${error.message}`
+            : "Signed in, but we couldn't synchronize your profile."
+        );
+      } finally {
+        setChecking(false);
+      }
     });
+
+    return () => {
+      unsubscribe();
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
   }, []);
 
   async function googleSignIn() {
@@ -38,6 +103,7 @@ export default function AccountPage() {
 
     try {
       await signInWithPopup(auth, new GoogleAuthProvider());
+      // onAuthStateChanged synchronizes the customer profile.
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Google sign-in failed."
@@ -52,22 +118,34 @@ export default function AccountPage() {
     setMessage("");
 
     try {
-      if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
+      const normalizedPhone = phone.trim();
+
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
         throw new Error(
           "Enter your number with country code, for example +919876543210."
         );
       }
 
-      const verifier = new RecaptchaVerifier(auth, "recaptcha-container", {});
+      if (!recaptchaRef.current) {
+        recaptchaRef.current = new RecaptchaVerifier(
+          auth,
+          "recaptcha-container",
+          {}
+        );
+      }
+
       const result = await signInWithPhoneNumber(
         auth,
-        phone.trim(),
-        verifier
+        normalizedPhone,
+        recaptchaRef.current
       );
 
       setConfirmation(result);
       setMessage("OTP sent. Check your phone.");
     } catch (error) {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+
       setMessage(
         error instanceof Error ? error.message : "Unable to send OTP."
       );
@@ -86,7 +164,8 @@ export default function AccountPage() {
       await confirmation.confirm(otp.trim());
       setConfirmation(null);
       setOtp("");
-      setMessage("You are signed in.");
+      setMessage("OTP verified. Loading your customer profile...");
+      // onAuthStateChanged synchronizes the customer profile.
     } catch {
       setMessage("OTP verification failed. Check the code and try again.");
     } finally {
@@ -95,12 +174,25 @@ export default function AccountPage() {
   }
 
   async function logout() {
-    await signOut(auth);
-    setMessage("You have signed out.");
+    setBusy(true);
+
+    try {
+      await signOut(auth);
+      setProfileSynced(false);
+      setMessage("You have signed out.");
+    } catch {
+      setMessage("Unable to sign out. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (checking) {
-    return <main className="wrap page"><p>Loading account...</p></main>;
+    return (
+      <main className="wrap page">
+        <p>Loading account...</p>
+      </main>
+    );
   }
 
   if (user) {
@@ -119,35 +211,57 @@ export default function AccountPage() {
           />
         )}
 
-        <p><strong>{user.displayName || "Vooye customer"}</strong></p>
+        <p>
+          <strong>{user.displayName || "Vooye customer"}</strong>
+        </p>
         <p>{user.email || user.phoneNumber}</p>
 
-        <div className="stack">
-          <Link className="button" href="/account/orders">My orders</Link>
-          <Link className="button" href="/wishlist">Wishlist</Link>
-          <Link className="button" href="/track">Track order</Link>
-          <button className="secondary" onClick={logout}>Sign out</button>
-        </div>
-
         {message && <p role="status">{message}</p>}
+
+        {profileSynced && (
+          <div className="stack">
+            <Link className="button" href="/account/orders">
+              My orders
+            </Link>
+            <Link className="button" href="/wishlist">
+              Wishlist
+            </Link>
+            <Link className="button" href="/track">
+              Track order
+            </Link>
+          </div>
+        )}
+
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={logout}
+        >
+          Sign out
+        </button>
       </main>
     );
   }
 
   return (
     <main className="wrap page">
-      <div className="panel stack" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div
+        className="panel stack"
+        style={{ maxWidth: 480, margin: "0 auto" }}
+      >
         <h1>Welcome to VOOYE</h1>
+
         <p className="muted">
           Sign in to manage your account, wishlist and orders.
         </p>
 
         <button disabled={busy} onClick={googleSignIn}>
-          Continue with Google
+          {busy ? "Please wait..." : "Continue with Google"}
         </button>
 
         <div className="item">
           <label htmlFor="phone">Mobile number with country code</label>
+
           <input
             id="phone"
             type="tel"
@@ -155,6 +269,7 @@ export default function AccountPage() {
             placeholder="+919876543210"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
+            disabled={busy || Boolean(confirmation)}
           />
 
           {!confirmation ? (
@@ -164,6 +279,7 @@ export default function AccountPage() {
           ) : (
             <>
               <label htmlFor="otp">Verification code</label>
+
               <input
                 id="otp"
                 inputMode="numeric"
@@ -171,8 +287,13 @@ export default function AccountPage() {
                 placeholder="Enter OTP"
                 value={otp}
                 onChange={(event) => setOtp(event.target.value)}
+                disabled={busy}
               />
-              <button disabled={busy || !otp.trim()} onClick={verifyOtp}>
+
+              <button
+                disabled={busy || !otp.trim()}
+                onClick={verifyOtp}
+              >
                 Verify OTP
               </button>
             </>
