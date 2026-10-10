@@ -25,5 +25,5 @@ function firebaseAdminAuth() {
 }
 
 export async function verifyFirebaseIdToken(token: string) {
-  return firebaseAdminAuth().verifyIdToken(token);
+  return firebaseAdminAuth().verifyIdToken(token,true);
 }
