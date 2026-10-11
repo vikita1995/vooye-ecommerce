@@ -6,12 +6,43 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
-enum UserRole {\n  CUSTOMER\n  SELLER\n  ADMIN\n}
-enum SellerStatus {\n  PENDING\n  APPROVED\n  REJECTED\n  SUSPENDED\n}
-enum ProductStatus {\n  DRAFT\n  ACTIVE\n  HIDDEN\n}
-enum OrderStatus {\n  PENDING_PAYMENT\n  PAID\n  PROCESSING\n  SHIPPED\n  DELIVERED\n  CANCELLED\n  REFUND_PENDING\n  REFUNDED\n}
-enum PaymentStatus {\n  CREATED\n  AUTHORIZED\n  CAPTURED\n  FAILED\n  REFUND_PENDING\n  REFUNDED\n}
-enum PaymentProvider {\n  RAZORPAY\n}
+enum UserRole {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+enum SellerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  HIDDEN
+}
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+}
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+enum PaymentProvider {
+  RAZORPAY
+}
 model User {
   id            String   @id @default(cuid())
   firebaseUid   String   @unique
