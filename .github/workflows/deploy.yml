@@ -10,10 +10,10 @@ permissions:
   id-token: write
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  REGION: ${{ vars.GCP_REGION }}
-  REPOSITORY: ${{ vars.AR_REPOSITORY }}
-  SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  PROJECT_ID: ${{ vars.PROJECT_ID }}
+  REGION: ${{ vars.REGION }}
+  REPOSITORY: ${{ vars.REPOSITORY }}
+  SERVICE: ${{ vars.SERVICE }}
 
 jobs:
   deploy:
@@ -45,7 +45,7 @@ jobs:
       - name: Build and push image
         run: |
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/vooye:${GITHUB_SHA}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/vooye-frontend:${GITHUB_SHA}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
