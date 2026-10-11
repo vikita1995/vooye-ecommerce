@@ -1,8 +1,17 @@
+
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  onAuthStateChanged,
+  signOut,
+  RecaptchaVerifier,
+  PhoneAuthProvider,
+  linkWithCredential,
+  updatePhoneNumber,
+  type User,
+} from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 type Customer = {
@@ -22,19 +31,31 @@ type Customer = {
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otp, setOtp] = useState("");
+  const [verificationId, setVerificationId] = useState("");
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneMessage, setPhoneMessage] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadProfile = useCallback(async (currentUser: User) => {
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
       const token = await currentUser.getIdToken();
@@ -54,14 +75,17 @@ export default function AccountPage() {
       }
 
       const profile = result.customer;
+
       setCustomer(profile);
       setFullName(profile.full_name ?? "");
       setDateOfBirth(profile.date_of_birth ?? "");
       setGender(profile.gender ?? "");
-    } catch (err) {
+    } catch (cause) {
       setCustomer(null);
       setError(
-        err instanceof Error ? err.message : "Unable to load your profile."
+        cause instanceof Error
+          ? cause.message
+          : "Unable to load your profile."
       );
     } finally {
       setLoading(false);
@@ -77,6 +101,10 @@ export default function AccountPage() {
         setCustomer(null);
         setError("");
         setSuccess("");
+        setPhoneError("");
+        setPhoneMessage("");
+        setVerificationId("");
+        setOtp("");
 
         if (currentUser) {
           void loadProfile(currentUser);
@@ -89,7 +117,11 @@ export default function AccountPage() {
       setLoading(false);
     }
 
-    return () => unsubscribe?.();
+    return () => {
+      unsubscribe?.();
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
   }, [loadProfile]);
 
   async function handleSave(event: React.FormEvent<HTMLFormElement>) {
@@ -131,12 +163,164 @@ export default function AccountPage() {
       setDateOfBirth(result.customer.date_of_birth ?? "");
       setGender(result.customer.gender ?? "");
       setSuccess("Your personal information has been saved.");
-    } catch (err) {
+    } catch (cause) {
       setError(
-        err instanceof Error ? err.message : "Unable to save your profile."
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save your profile."
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  function clearPhoneVerification() {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+
+    setVerificationId("");
+    setOtp("");
+    setPhoneMessage("");
+    setPhoneError("");
+  }
+
+  async function handleSendOtp() {
+    if (!user) return;
+
+    const phone = phoneInput.trim();
+
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      setPhoneError(
+        "Enter a valid international number, for example +919876543210."
+      );
+      return;
+    }
+
+    setPhoneBusy(true);
+    setPhoneError("");
+    setPhoneMessage("");
+
+    try {
+      const auth = getFirebaseAuth();
+
+      if (!recaptchaRef.current) {
+        if (!recaptchaContainerRef.current) {
+          throw new Error("Verification could not initialize. Refresh the page and try again.");
+        }
+
+        recaptchaRef.current = new RecaptchaVerifier(
+          auth,
+          recaptchaContainerRef.current,
+          { size: "normal" }
+        );
+      }
+
+      const provider = new PhoneAuthProvider(auth);
+      const id = await provider.verifyPhoneNumber(
+        phone,
+        recaptchaRef.current
+      );
+
+      setVerificationId(id);
+      setPhoneMessage("OTP sent. Enter the verification code below.");
+    } catch (cause) {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+
+      setPhoneError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to send the OTP. Please try again."
+      );
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
+
+  async function handleVerifyPhone(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!user || !verificationId) return;
+
+    const code = otp.trim();
+
+    if (!/^\d{6}$/.test(code)) {
+      setPhoneError("Enter the 6-digit verification code.");
+      return;
+    }
+
+    setPhoneBusy(true);
+    setPhoneError("");
+    setPhoneMessage("");
+
+    try {
+      const credential = PhoneAuthProvider.credential(
+        verificationId,
+        code
+      );
+
+      const hasPhoneProvider = user.providerData.some(
+        (provider) => provider.providerId === "phone"
+      );
+
+      let updatedUser: User;
+
+      if (hasPhoneProvider) {
+        // Replace the existing phone number on the current Firebase account.
+        await updatePhoneNumber(user, credential);
+        updatedUser = user;
+      } else {
+        // Link the verified phone to the existing Google/email account.
+        const linked = await linkWithCredential(user, credential);
+        updatedUser = linked.user;
+      }
+
+      await updatedUser.reload();
+
+      const verifiedPhone = updatedUser.phoneNumber;
+
+      if (!verifiedPhone) {
+        throw new Error(
+          "Firebase did not return the verified phone number. Please refresh and try again."
+        );
+      }
+
+      const token = await updatedUser.getIdToken(true);
+
+      const response = await fetch("/api/customer/phone", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phone_number: verifiedPhone }),
+      });
+
+      const result = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || "Unable to save the verified phone number."
+        );
+      }
+
+      setPhoneInput("");
+      setOtp("");
+      setVerificationId("");
+      setPhoneMessage("Your mobile number has been verified and linked.");
+
+      await loadProfile(updatedUser);
+    } catch (cause) {
+      setPhoneError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to verify your mobile number."
+      );
+    } finally {
+      setPhoneBusy(false);
     }
   }
 
@@ -290,10 +474,118 @@ export default function AccountPage() {
                     </div>
                   </div>
 
-                  <p className="muted">
-                    Contact details require a separate verification step before
-                    they can be changed.
-                  </p>
+                  <div style={{ marginTop: 24 }}>
+                    <h3>
+                      {customer.phone_e164
+                        ? "Update mobile number"
+                        : "Add mobile number"}
+                    </h3>
+                    <p className="muted">
+                      Verify your number by SMS to link it to your existing
+                      account.
+                    </p>
+
+                    <form
+                      className="stack"
+                      onSubmit={
+                        verificationId
+                          ? handleVerifyPhone
+                          : (event) => {
+                              event.preventDefault();
+                              void handleSendOtp();
+                            }
+                      }
+                    >
+                      <label className="field">
+                        Mobile number with country code
+                        <input
+                          type="tel"
+                          name="phone_number"
+                          autoComplete="tel"
+                          placeholder="+919876543210"
+                          value={phoneInput}
+                          onChange={(event) =>
+                            setPhoneInput(event.target.value)
+                          }
+                          disabled={phoneBusy || Boolean(verificationId)}
+                          required
+                        />
+                      </label>
+
+                      <div
+                        ref={recaptchaContainerRef}
+                        id="phone-recaptcha-container"
+                      />
+
+                      {!verificationId ? (
+                        <div>
+                          <button
+                            type="submit"
+                            disabled={phoneBusy || !phoneInput.trim()}
+                          >
+                            {phoneBusy ? "Sending OTP…" : "Send OTP"}
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <label className="field">
+                            6-digit verification code
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              autoComplete="one-time-code"
+                              pattern="[0-9]{6}"
+                              maxLength={6}
+                              value={otp}
+                              onChange={(event) =>
+                                setOtp(
+                                  event.target.value.replace(/\D/g, "").slice(0, 6)
+                                )
+                              }
+                              required
+                            />
+                          </label>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <button
+                              type="submit"
+                              disabled={phoneBusy || otp.length !== 6}
+                            >
+                              {phoneBusy
+                                ? "Verifying…"
+                                : "Verify and save number"}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={phoneBusy}
+                              onClick={clearPhoneVerification}
+                            >
+                              Change number
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {phoneMessage && (
+                        <p role="status" style={{ color: "green" }}>
+                          {phoneMessage}
+                        </p>
+                      )}
+
+                      {phoneError && (
+                        <p role="alert" className="notice">
+                          {phoneError}
+                        </p>
+                      )}
+                    </form>
+                  </div>
                 </article>
 
                 <div className="grid">
