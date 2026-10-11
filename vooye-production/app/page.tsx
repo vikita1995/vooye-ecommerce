@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ProfileLink from "@/components/profile-link";
 
 const products = [
   {
@@ -37,7 +38,7 @@ export default function Home() {
           <Link href="/seller">Sell on Vooye</Link>
           <Link href="/account/orders">My orders</Link>
           <Link href="/cart">Cart</Link>
-          <Link href="/sign-in">Sign in</Link>
+          <ProfileLink />
         </nav>
       </header>
 
@@ -117,8 +118,8 @@ export default function Home() {
               Sign in through Firebase to access your own order history and
               account.
             </p>
-            <Link className="button" href="/sign-in">
-              Sign in to your account
+            <Link className="button" href="/account">
+              View your account
             </Link>
           </div>
         </div>
