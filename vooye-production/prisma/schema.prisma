@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+enum UserRole {\n  CUSTOMER\n  SELLER\n  ADMIN\n}
+enum SellerStatus {\n  PENDING\n  APPROVED\n  REJECTED\n  SUSPENDED\n}
+enum ProductStatus {\n  DRAFT\n  ACTIVE\n  HIDDEN\n}
+enum OrderStatus {\n  PENDING_PAYMENT\n  PAID\n  PROCESSING\n  SHIPPED\n  DELIVERED\n  CANCELLED\n  REFUND_PENDING\n  REFUNDED\n}
+enum PaymentStatus {\n  CREATED\n  AUTHORIZED\n  CAPTURED\n  FAILED\n  REFUND_PENDING\n  REFUNDED\n}
+enum PaymentProvider {\n  RAZORPAY\n}
+model User {
+  id            String   @id @default(cuid())
+  firebaseUid   String   @unique
+  email         String   @unique
+  displayName   String?
+  role          UserRole @default(CUSTOMER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  seller        Seller?
+  orders        Order[]
+}
+model Seller {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  storeName      String
+  slug           String       @unique
+  description    String?
+  supportEmail   String?
+  phone          String?
+  status         SellerStatus @default(PENDING)
+  payoutNotes    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products       Product[]
+  orderItems     OrderItem[]
+}
+model Product {
+  id             String        @id @default(cuid())
+  sellerId       String
+  slug           String        @unique
+  name           String
+  category       String
+  description    String
+  dimensions     String?
+  imageUrl       String?
+  pricePaise     Int
+  stock          Int           @default(0)
+  status         ProductStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  seller         Seller        @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  orderItems     OrderItem[]
+  @@index([status, category])
+  @@index([sellerId, status])
+}
+model Order {
+  id                  String        @id @default(cuid())
+  orderNumber         String        @unique
+  userId              String
+  status              OrderStatus   @default(PENDING_PAYMENT)
+  subtotalPaise       Int
+  shippingPaise       Int
+  totalPaise          Int
+  currency            String        @default("INR")
+  paymentProvider     PaymentProvider @default(RAZORPAY)
+  paymentStatus       PaymentStatus @default(CREATED)
+  razorpayOrderId     String?       @unique
+  razorpayPaymentId   String?       @unique
+  shippingName        String
+  shippingPhone       String
+  shippingAddress1    String
+  shippingAddress2    String?
+  shippingCity        String
+  shippingState       String
+  shippingPostalCode  String
+  paymentExpiresAt    DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  user                User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items               OrderItem[]
+  paymentEvents       PaymentEvent[]
+  @@index([userId, createdAt])
+  @@index([status, paymentExpiresAt])
+}
+model OrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  productId        String
+  sellerId         String
+  productName      String
+  unitPricePaise   Int
+  quantity         Int
+  lineTotalPaise   Int
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  seller           Seller   @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  @@index([sellerId, orderId])
+}
+model PaymentEvent {
+  id                String   @id @default(cuid())
+  orderId           String
+  providerEventId   String   @unique
+  eventType         String
+  payloadHash       String
+  processedAt       DateTime @default(now())
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([orderId, processedAt])
+}
