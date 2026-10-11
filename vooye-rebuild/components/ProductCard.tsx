@@ -1,4 +1,0 @@
-import Link from "next/link";
-import { Product } from "@prisma/client";
-import { rupees } from "@/lib/money";
-export function ProductCard({product}:{product:Product}){return <article className="product"><Link href={`/product/${product.slug}`} className="product-art"><span className="badge">Vooye selection</span><span className="mirror"/></Link><div className="product-copy"><div className="muted small">{product.category}</div><Link href={`/product/${product.slug}`}><h3>{product.name}</h3></Link><div className="price">{rupees(product.pricePaise)} {product.compareAtPaise&&product.compareAtPaise>product.pricePaise?<del className="muted small">{rupees(product.compareAtPaise)}</del>:null}</div><div className="muted small">{product.stock>0?"In stock":"Currently unavailable"} · {product.dimensions}</div><Link className="button" href={`/product/${product.slug}`}>View details</Link></div></article>}

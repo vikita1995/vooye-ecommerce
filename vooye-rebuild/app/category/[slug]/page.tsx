@@ -1,4 +1,0 @@
-import {db} from "@/lib/db";import {ProductCard} from "@/components/ProductCard";import {notFound} from "next/navigation";
-export const dynamic="force-dynamic";
-const names:Record<string,string>={"full-length-mirrors":"Full-length mirrors","wall-mirrors":"Wall mirrors","vanity-mirrors":"Vanity mirrors"};
-export default async function CategoryPage({params}:{params:Promise<{slug:string}>}){const {slug}=await params;const category=names[slug];if(!category)notFound();const products=await db.product.findMany({where:{active:true,category:{equals:category,mode:"insensitive"}},orderBy:{createdAt:"asc"}});return <div className="wrap page"><div className="eyebrow">Shop by category</div><h1>{category}</h1><p className="muted">Explore designs picked for your space.</p>{products.length?<div className="grid">{products.map(p=><ProductCard key={p.id} product={p}/>)}</div>:<div className="empty">No products in this category currently.</div>}</div>}
