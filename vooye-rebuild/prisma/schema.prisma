@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+enum PaymentMethod {
+  RAZORPAY
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  category    String
+  description String   @db.Text
+  dimensions  String
+  pricePaise  Int
+  compareAtPaise Int?
+  imageUrl    String?
+  active      Boolean  @default(true)
+  stock       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orderItems  OrderItem[]
+  @@index([category, active])
+  @@index([active, createdAt])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  firebaseUid String  @unique
+  email      String?
+  name       String?
+  phone      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  orders     Order[]
+  @@index([email])
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  orderNumber         String        @unique
+  customerId          String
+  customer            Customer      @relation(fields: [customerId], references: [id])
+  status              OrderStatus   @default(PENDING)
+  paymentStatus       PaymentStatus @default(PENDING)
+  paymentMethod       PaymentMethod
+  paymentProviderId   String?       @unique
+  subtotalPaise       Int
+  shippingPaise       Int
+  totalPaise          Int
+  currency            String        @default("INR")
+  recipientName       String
+  phone               String
+  addressLine1        String
+  addressLine2        String?
+  city                String
+  state               String
+  postalCode          String
+  notes               String?
+  shippingProvider    String?
+  trackingNumber      String?
+  trackingUrl         String?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  items               OrderItem[]
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+  productName     String
+  unitPricePaise  Int
+  quantity        Int
+  lineTotalPaise  Int
+  @@index([orderId])
+}
+
+model ProcessedWebhook {
+  id          String   @id @default(cuid())
+  provider     String
+  eventId      String   @unique
+  processedAt  DateTime @default(now())
+}
