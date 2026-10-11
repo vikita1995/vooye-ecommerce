@@ -28,6 +28,42 @@ type Customer = {
   status: string;
 };
 
+function phoneErrorMessage(cause: unknown) {
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code?: unknown }).code)
+      : "";
+
+  const messages: Record<string, string> = {
+    "auth/code-expired":
+      "This OTP has expired. Select Resend OTP and enter the newest code.",
+    "auth/invalid-verification-code":
+      "That OTP is incorrect. Check the newest SMS and try again.",
+    "auth/credential-already-in-use":
+      "This phone number is already linked to another Firebase account. Sign in to that account or use a different number.",
+    "auth/provider-already-linked":
+      "A phone number is already linked to this account. Try updating the number again.",
+    "auth/requires-recent-login":
+      "For your security, sign out and sign in again before changing this number.",
+    "auth/too-many-requests":
+      "Too many attempts. Please wait before requesting another OTP.",
+    "auth/invalid-phone-number":
+      "Enter a valid phone number with country code, such as +919876543210.",
+    "auth/captcha-check-failed":
+      "reCAPTCHA verification failed. Complete the new reCAPTCHA and try again.",
+    "auth/missing-phone-number":
+      "Enter your mobile number before requesting an OTP.",
+    "auth/network-request-failed":
+      "Network error. Check your connection and try again.",
+  };
+
+  if (messages[code]) return messages[code];
+
+  return cause instanceof Error
+    ? cause.message
+    : "Something went wrong. Please try again.";
+}
+
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -75,7 +111,6 @@ export default function AccountPage() {
       }
 
       const profile = result.customer;
-
       setCustomer(profile);
       setFullName(profile.full_name ?? "");
       setDateOfBirth(profile.date_of_birth ?? "");
@@ -83,9 +118,7 @@ export default function AccountPage() {
     } catch (cause) {
       setCustomer(null);
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to load your profile."
+        cause instanceof Error ? cause.message : "Unable to load your profile."
       );
     } finally {
       setLoading(false);
@@ -126,7 +159,6 @@ export default function AccountPage() {
 
   async function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     if (!user || !customer) return;
 
     setSaving(true);
@@ -165,23 +197,11 @@ export default function AccountPage() {
       setSuccess("Your personal information has been saved.");
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to save your profile."
+        cause instanceof Error ? cause.message : "Unable to save your profile."
       );
     } finally {
       setSaving(false);
     }
-  }
-
-  function clearPhoneVerification() {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-
-    setVerificationId("");
-    setOtp("");
-    setPhoneMessage("");
-    setPhoneError("");
   }
 
   async function handleSendOtp() {
@@ -202,36 +222,34 @@ export default function AccountPage() {
 
     try {
       const auth = getFirebaseAuth();
+      const container = recaptchaContainerRef.current;
 
-      if (!recaptchaRef.current) {
-        if (!recaptchaContainerRef.current) {
-          throw new Error("Verification could not initialize. Refresh the page and try again.");
-        }
-
-        recaptchaRef.current = new RecaptchaVerifier(
-          auth,
-          recaptchaContainerRef.current,
-          { size: "normal" }
-        );
+      if (!container) {
+        throw new Error("Verification could not initialize. Refresh the page.");
       }
 
-      const provider = new PhoneAuthProvider(auth);
-      const id = await provider.verifyPhoneNumber(
-        phone,
-        recaptchaRef.current
-      );
-
-      setVerificationId(id);
-      setPhoneMessage("OTP sent. Enter the verification code below.");
-    } catch (cause) {
+      // Reset reCAPTCHA so each OTP request gets a fresh verification attempt.
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
 
-      setPhoneError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to send the OTP. Please try again."
+      const verifier = new RecaptchaVerifier(auth, container, {
+        size: "normal",
+      });
+      recaptchaRef.current = verifier;
+
+      const provider = new PhoneAuthProvider(auth);
+      const newVerificationId = await provider.verifyPhoneNumber(
+        phone,
+        verifier
       );
+
+      setVerificationId(newVerificationId);
+      setOtp("");
+      setPhoneMessage("A new OTP was sent. Enter the newest code from your SMS.");
+    } catch (cause) {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+      setPhoneError(phoneErrorMessage(cause));
     } finally {
       setPhoneBusy(false);
     }
@@ -254,10 +272,7 @@ export default function AccountPage() {
     setPhoneMessage("");
 
     try {
-      const credential = PhoneAuthProvider.credential(
-        verificationId,
-        code
-      );
+      const credential = PhoneAuthProvider.credential(verificationId, code);
 
       const hasPhoneProvider = user.providerData.some(
         (provider) => provider.providerId === "phone"
@@ -266,11 +281,9 @@ export default function AccountPage() {
       let updatedUser: User;
 
       if (hasPhoneProvider) {
-        // Replace the existing phone number on the current Firebase account.
         await updatePhoneNumber(user, credential);
         updatedUser = user;
       } else {
-        // Link the verified phone to the existing Google/email account.
         const linked = await linkWithCredential(user, credential);
         updatedUser = linked.user;
       }
@@ -278,10 +291,9 @@ export default function AccountPage() {
       await updatedUser.reload();
 
       const verifiedPhone = updatedUser.phoneNumber;
-
       if (!verifiedPhone) {
         throw new Error(
-          "Firebase did not return the verified phone number. Please refresh and try again."
+          "Firebase did not return the verified number. Please refresh and try again."
         );
       }
 
@@ -302,9 +314,7 @@ export default function AccountPage() {
       };
 
       if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || "Unable to save the verified phone number."
-        );
+        throw new Error(result.error || "Unable to save the verified number.");
       }
 
       setPhoneInput("");
@@ -314,14 +324,19 @@ export default function AccountPage() {
 
       await loadProfile(updatedUser);
     } catch (cause) {
-      setPhoneError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to verify your mobile number."
-      );
+      setPhoneError(phoneErrorMessage(cause));
     } finally {
       setPhoneBusy(false);
     }
+  }
+
+  function handleChangeNumber() {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    setVerificationId("");
+    setOtp("");
+    setPhoneError("");
+    setPhoneMessage("");
   }
 
   async function handleSignOut() {
@@ -340,10 +355,7 @@ export default function AccountPage() {
   return (
     <main className="wrap">
       <header className="top">
-        <Link className="brand" href="/">
-          VOOYE
-        </Link>
-
+        <Link className="brand" href="/">VOOYE</Link>
         <nav className="nav">
           <Link href="/">Shop</Link>
           <Link href="/account/orders">My orders</Link>
@@ -355,8 +367,7 @@ export default function AccountPage() {
         <div className="eyebrow">YOUR ACCOUNT</div>
         <h1>My account</h1>
         <p className="muted">
-          Manage your personal information, contact details, addresses and
-          orders.
+          Manage your personal information, contact details, addresses and orders.
         </p>
 
         {loading ? (
@@ -389,8 +400,7 @@ export default function AccountPage() {
                 <article className="panel">
                   <h2>Personal information</h2>
                   <p className="muted">
-                    Keep your details up to date for a smoother shopping
-                    experience.
+                    Keep your details up to date for a smoother shopping experience.
                   </p>
 
                   <form className="stack" onSubmit={handleSave}>
@@ -415,9 +425,7 @@ export default function AccountPage() {
                         min="1900-01-01"
                         max={new Date().toLocaleDateString("en-CA")}
                         value={dateOfBirth}
-                        onChange={(event) =>
-                          setDateOfBirth(event.target.value)
-                        }
+                        onChange={(event) => setDateOfBirth(event.target.value)}
                       />
                     </label>
 
@@ -442,9 +450,7 @@ export default function AccountPage() {
                     </div>
 
                     {success && (
-                      <p role="status" style={{ color: "green" }}>
-                        {success}
-                      </p>
+                      <p role="status" style={{ color: "green" }}>{success}</p>
                     )}
                   </form>
                 </article>
@@ -457,9 +463,7 @@ export default function AccountPage() {
                       <strong>Email address</strong>
                       <p>{customer.email || "Not linked"}</p>
                       <span className="badge">
-                        {customer.email_verified_at
-                          ? "Verified"
-                          : "Not verified"}
+                        {customer.email_verified_at ? "Verified" : "Not verified"}
                       </span>
                     </div>
 
@@ -467,22 +471,17 @@ export default function AccountPage() {
                       <strong>Mobile number</strong>
                       <p>{customer.phone_e164 || "Not linked"}</p>
                       <span className="badge">
-                        {customer.phone_verified_at
-                          ? "Verified"
-                          : "Not verified"}
+                        {customer.phone_verified_at ? "Verified" : "Not verified"}
                       </span>
                     </div>
                   </div>
 
                   <div style={{ marginTop: 24 }}>
                     <h3>
-                      {customer.phone_e164
-                        ? "Update mobile number"
-                        : "Add mobile number"}
+                      {customer.phone_e164 ? "Update mobile number" : "Add mobile number"}
                     </h3>
                     <p className="muted">
-                      Verify your number by SMS to link it to your existing
-                      account.
+                      Verify your number by SMS to link it to your existing account.
                     </p>
 
                     <form
@@ -504,18 +503,13 @@ export default function AccountPage() {
                           autoComplete="tel"
                           placeholder="+919876543210"
                           value={phoneInput}
-                          onChange={(event) =>
-                            setPhoneInput(event.target.value)
-                          }
+                          onChange={(event) => setPhoneInput(event.target.value)}
                           disabled={phoneBusy || Boolean(verificationId)}
                           required
                         />
                       </label>
 
-                      <div
-                        ref={recaptchaContainerRef}
-                        id="phone-recaptcha-container"
-                      />
+                      <div ref={recaptchaContainerRef} />
 
                       {!verificationId ? (
                         <div>
@@ -538,34 +532,32 @@ export default function AccountPage() {
                               maxLength={6}
                               value={otp}
                               onChange={(event) =>
-                                setOtp(
-                                  event.target.value.replace(/\D/g, "").slice(0, 6)
-                                )
+                                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
                               }
                               required
                             />
                           </label>
 
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 12,
-                              flexWrap: "wrap",
-                            }}
-                          >
+                          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                             <button
                               type="submit"
                               disabled={phoneBusy || otp.length !== 6}
                             >
-                              {phoneBusy
-                                ? "Verifying…"
-                                : "Verify and save number"}
+                              {phoneBusy ? "Verifying…" : "Verify and save number"}
                             </button>
 
                             <button
                               type="button"
                               disabled={phoneBusy}
-                              onClick={clearPhoneVerification}
+                              onClick={handleSendOtp}
+                            >
+                              {phoneBusy ? "Sending…" : "Resend OTP"}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={phoneBusy}
+                              onClick={handleChangeNumber}
                             >
                               Change number
                             </button>
@@ -580,9 +572,7 @@ export default function AccountPage() {
                       )}
 
                       {phoneError && (
-                        <p role="alert" className="notice">
-                          {phoneError}
-                        </p>
+                        <p role="alert" className="notice">{phoneError}</p>
                       )}
                     </form>
                   </div>
@@ -591,19 +581,13 @@ export default function AccountPage() {
                 <div className="grid">
                   <article className="panel">
                     <h2>My addresses</h2>
-                    <p className="muted">
-                      Manage your shipping and billing addresses.
-                    </p>
-                    <Link href="/account/addresses">
-                      Manage my addresses →
-                    </Link>
+                    <p className="muted">Manage your shipping and billing addresses.</p>
+                    <Link href="/account/addresses">Manage my addresses →</Link>
                   </article>
 
                   <article className="panel">
                     <h2>My orders</h2>
-                    <p className="muted">
-                      View your purchases and order status.
-                    </p>
+                    <p className="muted">View your purchases and order status.</p>
                     <Link href="/account/orders">View my orders →</Link>
                   </article>
                 </div>
