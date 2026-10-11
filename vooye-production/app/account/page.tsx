@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -14,6 +13,8 @@ type Customer = {
   phone_e164: string | null;
   email_verified_at: string | null;
   phone_verified_at: string | null;
+  date_of_birth: string | null;
+  gender: "male" | "female" | "other" | null;
   registration_completed_at: string | null;
   status: string;
 };
@@ -21,23 +22,25 @@ type Customer = {
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [gender, setGender] = useState("");
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const loadProfile = useCallback(async (currentUser: User) => {
-    setProfileLoading(true);
+    setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
       const token = await currentUser.getIdToken();
 
       const response = await fetch("/api/customer/profile", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
 
@@ -46,48 +49,96 @@ export default function AccountPage() {
         error?: string;
       };
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Unable to load your customer profile."
-        );
+      if (!response.ok || !result.customer) {
+        throw new Error(result.error || "Unable to load your profile.");
       }
 
-      if (!result.customer) {
-        throw new Error("The customer profile was not returned.");
-      }
-
-      setCustomer(result.customer);
+      const profile = result.customer;
+      setCustomer(profile);
+      setFullName(profile.full_name ?? "");
+      setDateOfBirth(profile.date_of_birth ?? "");
+      setGender(profile.gender ?? "");
     } catch (err) {
       setCustomer(null);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load your customer profile."
+        err instanceof Error ? err.message : "Unable to load your profile."
       );
     } finally {
-      setProfileLoading(false);
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const auth = getFirebaseAuth();
+    let unsubscribe: (() => void) | undefined;
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setCustomer(null);
-      setError("");
+    try {
+      unsubscribe = onAuthStateChanged(getFirebaseAuth(), (currentUser) => {
+        setUser(currentUser);
+        setCustomer(null);
+        setError("");
+        setSuccess("");
 
-      if (currentUser) {
-        void loadProfile(currentUser);
-      } else {
-        setLoading(false);
-        setProfileLoading(false);
-      }
-    });
+        if (currentUser) {
+          void loadProfile(currentUser);
+        } else {
+          setLoading(false);
+        }
+      });
+    } catch {
+      setError("Unable to initialize sign-in. Please refresh the page.");
+      setLoading(false);
+    }
 
-    return unsubscribe;
+    return () => unsubscribe?.();
   }, [loadProfile]);
+
+  async function handleSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!user || !customer) return;
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch("/api/customer/profile", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          full_name: fullName,
+          date_of_birth: dateOfBirth || null,
+          gender: gender || null,
+        }),
+      });
+
+      const result = (await response.json()) as {
+        customer?: Customer;
+        error?: string;
+      };
+
+      if (!response.ok || !result.customer) {
+        throw new Error(result.error || "Unable to save your profile.");
+      }
+
+      setCustomer(result.customer);
+      setFullName(result.customer.full_name ?? "");
+      setDateOfBirth(result.customer.date_of_birth ?? "");
+      setGender(result.customer.gender ?? "");
+      setSuccess("Your personal information has been saved.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to save your profile."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -119,38 +170,30 @@ export default function AccountPage() {
       <section className="section">
         <div className="eyebrow">YOUR ACCOUNT</div>
         <h1>My account</h1>
-
         <p className="muted">
-          Manage your profile, addresses and orders in one place.
+          Manage your personal information, contact details, addresses and
+          orders.
         </p>
 
-        {loading || profileLoading ? (
-          <p role="status" style={{ marginTop: 24 }}>
-            Loading your account…
-          </p>
+        {loading ? (
+          <p role="status">Loading your account…</p>
         ) : !user ? (
-          <article className="panel" style={{ marginTop: 24 }}>
+          <article className="panel">
             <h2>Welcome to Vooye</h2>
             <p className="muted">
               Sign in with Google or your mobile number to access your account.
             </p>
-            <p style={{ marginTop: 16 }}>
-              <Link href="/sign-in">Sign in to your account →</Link>
-            </p>
+            <Link href="/sign-in">Sign in to your account →</Link>
           </article>
         ) : (
           <>
             {error && (
-              <div
-                role="alert"
-                className="panel"
-                style={{ marginTop: 24 }}
-              >
-                <p>{error}</p>
+              <div className="notice" role="alert">
+                {error}
                 <button
                   type="button"
                   onClick={() => void loadProfile(user)}
-                  style={{ marginTop: 12, padding: 10 }}
+                  style={{ marginLeft: 12 }}
                 >
                   Try again
                 </button>
@@ -158,69 +201,131 @@ export default function AccountPage() {
             )}
 
             {customer && (
-              <article className="panel" style={{ marginTop: 24 }}>
-                <h2>My profile</h2>
+              <>
+                <article className="panel">
+                  <h2>Personal information</h2>
+                  <p className="muted">
+                    Keep your details up to date for a smoother shopping
+                    experience.
+                  </p>
 
-                <dl style={{ display: "grid", gap: 16 }}>
-                  <div>
-                    <dt className="muted">Full name</dt>
-                    <dd style={{ margin: "4px 0 0" }}>
-                      {customer.full_name || "Not added"}
-                    </dd>
+                  <form className="stack" onSubmit={handleSave}>
+                    <label className="field">
+                      Full name
+                      <input
+                        name="full_name"
+                        autoComplete="name"
+                        minLength={2}
+                        maxLength={100}
+                        required
+                        value={fullName}
+                        onChange={(event) => setFullName(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="field">
+                      Date of birth
+                      <input
+                        name="date_of_birth"
+                        type="date"
+                        min="1900-01-01"
+                        max={new Date().toLocaleDateString("en-CA")}
+                        value={dateOfBirth}
+                        onChange={(event) =>
+                          setDateOfBirth(event.target.value)
+                        }
+                      />
+                    </label>
+
+                    <label className="field">
+                      Gender
+                      <select
+                        name="gender"
+                        value={gender}
+                        onChange={(event) => setGender(event.target.value)}
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+
+                    <div>
+                      <button type="submit" disabled={saving}>
+                        {saving ? "Saving…" : "Save changes"}
+                      </button>
+                    </div>
+
+                    {success && (
+                      <p role="status" style={{ color: "green" }}>
+                        {success}
+                      </p>
+                    )}
+                  </form>
+                </article>
+
+                <article className="panel">
+                  <h2>Email and mobile number</h2>
+
+                  <div className="stack">
+                    <div>
+                      <strong>Email address</strong>
+                      <p>{customer.email || "Not linked"}</p>
+                      <span className="badge">
+                        {customer.email_verified_at
+                          ? "Verified"
+                          : "Not verified"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>Mobile number</strong>
+                      <p>{customer.phone_e164 || "Not linked"}</p>
+                      <span className="badge">
+                        {customer.phone_verified_at
+                          ? "Verified"
+                          : "Not verified"}
+                      </span>
+                    </div>
                   </div>
 
-                  <div>
-                    <dt className="muted">Email</dt>
-                    <dd style={{ margin: "4px 0 0" }}>
-                      {customer.email || "Not linked"}
-                    </dd>
-                  </div>
+                  <p className="muted">
+                    Contact details require a separate verification step before
+                    they can be changed.
+                  </p>
+                </article>
 
-                  <div>
-                    <dt className="muted">Mobile number</dt>
-                    <dd style={{ margin: "4px 0 0" }}>
-                      {customer.phone_e164 || "Not linked"}
-                    </dd>
-                  </div>
+                <div className="grid">
+                  <article className="panel">
+                    <h2>My addresses</h2>
+                    <p className="muted">
+                      Manage your shipping and billing addresses.
+                    </p>
+                    <Link href="/account/addresses">
+                      Manage my addresses →
+                    </Link>
+                  </article>
 
-                  <div>
-                    <dt className="muted">Account status</dt>
-                    <dd style={{ margin: "4px 0 0" }}>
-                      {customer.status}
-                    </dd>
-                  </div>
-                </dl>
-              </article>
+                  <article className="panel">
+                    <h2>My orders</h2>
+                    <p className="muted">
+                      View your purchases and order status.
+                    </p>
+                    <Link href="/account/orders">View my orders →</Link>
+                  </article>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  style={{ marginTop: 12 }}
+                >
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
+              </>
             )}
-
-            <div className="grid" style={{ marginTop: 24 }}>
-              <article className="panel">
-                <h2>My addresses</h2>
-                <p className="muted">
-                  Manage your shipping and billing addresses.
-                </p>
-                <Link href="/account/addresses">
-                  Manage my addresses →
-                </Link>
-              </article>
-
-              <article className="panel">
-                <h2>My orders</h2>
-                <p className="muted">
-                  View your purchases and order status.
-                </p>
-                <Link href="/account/orders">View my orders →</Link>
-              </article>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              style={{ marginTop: 24, padding: 12 }}
-            >
-              {signingOut ? "Signing out…" : "Sign out"}
-            </button>
           </>
         )}
       </section>
