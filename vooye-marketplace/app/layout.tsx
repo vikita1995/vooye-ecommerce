@@ -1,3 +1,0 @@
-import type {Metadata} from "next";import type {ReactNode} from "react";import "./globals.css";import {Header,Footer} from "@/components/Layout";
-export const metadata:Metadata={title:"Vooye | Thoughtful pieces for every room",description:"Discover thoughtfully designed mirrors and home essentials at Vooye.",metadataBase:new URL("https://vooye.in")};
-export default function RootLayout({children}:{children:ReactNode}){return <html lang="en-IN"><body><Header/><main>{children}</main><Footer/></body></html>}
