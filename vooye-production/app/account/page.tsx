@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 
 export default function AccountPage() {
@@ -8,6 +7,7 @@ export default function AccountPage() {
         <Link className="brand" href="/">
           VOOYE
         </Link>
+
         <nav className="nav">
           <Link href="/">Shop</Link>
           <Link href="/account/orders">My orders</Link>
@@ -18,8 +18,13 @@ export default function AccountPage() {
       <section className="section">
         <div className="eyebrow">Your account</div>
         <h1>Welcome to Vooye</h1>
+
         <p className="muted">
           Manage your profile, addresses and orders in one place.
+        </p>
+
+        <p style={{ marginTop: 20, marginBottom: 24 }}>
+          <Link href="/sign-in">Sign in to your account →</Link>
         </p>
 
         <div className="grid">
@@ -29,8 +34,9 @@ export default function AccountPage() {
               Your personal details and contact information.
             </p>
             <p className="muted">
-              Profile management will be available after sign-in is connected.
+              Sign in to get started with your customer profile.
             </p>
+            <Link href="/sign-in">Manage my profile →</Link>
           </article>
 
           <article className="panel">
@@ -39,8 +45,9 @@ export default function AccountPage() {
               Manage your shipping and billing addresses.
             </p>
             <p className="muted">
-              Sign-in is required to manage saved addresses.
+              Sign in to manage your saved addresses.
             </p>
+            <Link href="/sign-in">Manage my addresses →</Link>
           </article>
 
           <article className="panel">
