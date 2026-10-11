@@ -1,3 +1,0 @@
-import {NextRequest,NextResponse} from "next/server";import {userFromRequest} from "@/lib/auth-server";import {db} from "@/lib/db";
-export const runtime="nodejs";
-export async function GET(request:NextRequest){const user=await userFromRequest(request);if(!user)return NextResponse.json({error:"Unauthorized"},{status:401});const customer=await db.customer.findUnique({where:{firebaseUid:user.uid}});if(!customer)return NextResponse.json({orders:[]});const orders=await db.order.findMany({where:{customerId:customer.id},include:{items:true},orderBy:{createdAt:"desc"},take:50});return NextResponse.json({orders})}

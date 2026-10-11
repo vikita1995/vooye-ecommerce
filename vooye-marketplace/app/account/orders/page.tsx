@@ -1,1 +1,0 @@
-export default function Orders(){return <div className="wrap page"><h1>Your orders</h1><div className="empty"><h2>No connected order history</h2><p className="muted">Orders appear here after login, database persistence and checkout are integrated.</p><a className="button" href="/search">Continue shopping</a></div></div>}
