@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   applicationDefault,
@@ -40,7 +41,7 @@ async function authenticate(request: NextRequest) {
   }
 
   try {
-    return await getFirebaseAuth().verifyIdToken(token);
+    return await getFirebaseAuth().verifyIdToken(token, true);
   } catch {
     throw new Error("AUTH_INVALID");
   }
@@ -122,13 +123,8 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      if (!fullName) {
-        return jsonError(
-          "Please add your name to your sign-in account before continuing.",
-          422
-        );
-      }
-
+      // Phone-only users may not have a Firebase display name.
+      // The customers.full_name column must allow NULL.
       const newCustomer = {
         firebase_uid: decoded.uid,
         full_name: fullName,
@@ -156,12 +152,17 @@ export async function GET(request: NextRequest) {
       );
 
       if (!createResponse.ok) {
-        console.error("Customer profile creation failed:", createResponse.status);
+        console.error(
+          "Customer profile creation failed:",
+          createResponse.status
+        );
         return jsonError("Unable to create customer profile.", 502);
       }
 
       const created = (await createResponse.json()) as Customer[];
-      customer = created[0] ?? await findCustomer(baseUrl, headers, decoded.uid);
+
+      customer =
+        created[0] ?? (await findCustomer(baseUrl, headers, decoded.uid));
     }
 
     if (!customer) {
@@ -178,11 +179,19 @@ export async function GET(request: NextRequest) {
       if (error.message === "AUTH_REQUIRED") {
         return jsonError("Authentication required.", 401);
       }
+
       if (error.message === "AUTH_INVALID") {
-        return jsonError("Your sign-in session is invalid or expired.", 401);
+        return jsonError(
+          "Your sign-in session is invalid or expired.",
+          401
+        );
       }
+
       if (error.message === "PROFILE_CONFIG_MISSING") {
-        return jsonError("Customer profile service is not configured.", 500);
+        return jsonError(
+          "Customer profile service is not configured.",
+          500
+        );
       }
     }
 
@@ -199,7 +208,10 @@ export async function PATCH(request: NextRequest) {
     const customer = await findCustomer(baseUrl, headers, decoded.uid);
 
     if (!customer) {
-      return jsonError("Customer profile was not found. Load your account first.", 404);
+      return jsonError(
+        "Customer profile was not found. Load your account first.",
+        404
+      );
     }
 
     if (customer.status !== "active") {
@@ -239,7 +251,10 @@ export async function PATCH(request: NextRequest) {
         input.full_name.trim().length < 2 ||
         input.full_name.trim().length > 100
       ) {
-        return jsonError("Enter a name between 2 and 100 characters.", 400);
+        return jsonError(
+          "Enter a name between 2 and 100 characters.",
+          400
+        );
       }
 
       updates.full_name = input.full_name.trim();
@@ -275,7 +290,10 @@ export async function PATCH(request: NextRequest) {
         input.gender !== null &&
         !["male", "female", "other"].includes(input.gender as string)
       ) {
-        return jsonError("Choose Male, Female, Other, or leave it blank.", 400);
+        return jsonError(
+          "Choose Male, Female, Other, or leave it blank.",
+          400
+        );
       }
 
       updates.gender = input.gender as string | null;
@@ -299,13 +317,19 @@ export async function PATCH(request: NextRequest) {
 
     if (!response.ok) {
       console.error("Customer profile update failed:", response.status);
-      return jsonError("Unable to save your profile. Please try again.", 502);
+      return jsonError(
+        "Unable to save your profile. Please try again.",
+        502
+      );
     }
 
     const updated = (await response.json()) as Customer[];
 
     if (!updated[0]) {
-      return jsonError("Your profile was not updated. Please try again.", 409);
+      return jsonError(
+        "Your profile was not updated. Please try again.",
+        409
+      );
     }
 
     return NextResponse.json({ customer: updated[0] });
@@ -314,11 +338,19 @@ export async function PATCH(request: NextRequest) {
       if (error.message === "AUTH_REQUIRED") {
         return jsonError("Authentication required.", 401);
       }
+
       if (error.message === "AUTH_INVALID") {
-        return jsonError("Your sign-in session is invalid or expired.", 401);
+        return jsonError(
+          "Your sign-in session is invalid or expired.",
+          401
+        );
       }
+
       if (error.message === "PROFILE_CONFIG_MISSING") {
-        return jsonError("Customer profile service is not configured.", 500);
+        return jsonError(
+          "Customer profile service is not configured.",
+          500
+        );
       }
     }
 
