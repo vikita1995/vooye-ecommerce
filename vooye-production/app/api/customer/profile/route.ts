@@ -5,7 +5,7 @@ import {
   getApps,
   initializeApp,
 } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +30,9 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function authenticate(request: NextRequest) {
+async function authenticate(
+  request: NextRequest
+): Promise<DecodedIdToken> {
   const authorization = request.headers.get("authorization");
   const token = authorization?.startsWith("Bearer ")
     ? authorization.slice(7).trim()
@@ -41,8 +43,15 @@ async function authenticate(request: NextRequest) {
   }
 
   try {
-    return await getFirebaseAuth().verifyIdToken(token, true);
-  } catch {
+    // Verifies token signature, issuer, audience and expiry.
+    // Revocation checking is intentionally disabled for this request.
+    return await getFirebaseAuth().verifyIdToken(token);
+  } catch (cause) {
+    // Never log the token itself.
+    console.error(
+      "Firebase ID token verification failed:",
+      cause instanceof Error ? cause.message : "Unknown verification error"
+    );
     throw new Error("AUTH_INVALID");
   }
 }
@@ -90,10 +99,14 @@ async function findCustomer(
 ): Promise<Customer | null> {
   const response = await fetch(
     `${baseUrl}?firebase_uid=eq.${encodeURIComponent(uid)}&select=${CUSTOMER_FIELDS}`,
-    { headers, cache: "no-store" }
+    {
+      headers,
+      cache: "no-store",
+    }
   );
 
   if (!response.ok) {
+    console.error("Customer lookup failed:", response.status);
     throw new Error("PROFILE_LOOKUP_FAILED");
   }
 
@@ -106,11 +119,18 @@ export async function GET(request: NextRequest) {
     const decoded = await authenticate(request);
     const { baseUrl, headers } = getSupabaseConfig();
 
-    let customer = await findCustomer(baseUrl, headers, decoded.uid);
+    // Always look up by the authenticated Firebase UID first.
+    // This avoids creating a second profile when the UID is unchanged.
+    let customer = await findCustomer(
+      baseUrl,
+      headers,
+      decoded.uid
+    );
 
     if (!customer) {
       const email = decoded.email?.trim().toLowerCase() || null;
       const phone = decoded.phone_number?.trim() || null;
+
       const fullName =
         decoded.name?.trim() ||
         decoded.email?.split("@")[0]?.trim() ||
@@ -123,8 +143,8 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Phone-only users may not have a Firebase display name.
-      // The customers.full_name column must allow NULL.
+      // Phone-only Firebase accounts may not have a display name.
+      // This requires customers.full_name to allow NULL in Supabase.
       const newCustomer = {
         firebase_uid: decoded.uid,
         full_name: fullName,
@@ -152,6 +172,8 @@ export async function GET(request: NextRequest) {
       );
 
       if (!createResponse.ok) {
+        // Do not log database response bodies because they may contain
+        // information that should not be exposed in application logs.
         console.error(
           "Customer profile creation failed:",
           createResponse.status
@@ -161,8 +183,10 @@ export async function GET(request: NextRequest) {
 
       const created = (await createResponse.json()) as Customer[];
 
+      // Handle concurrent requests or an existing UID safely.
       customer =
-        created[0] ?? (await findCustomer(baseUrl, headers, decoded.uid));
+        created[0] ??
+        (await findCustomer(baseUrl, headers, decoded.uid));
     }
 
     if (!customer) {
@@ -182,7 +206,7 @@ export async function GET(request: NextRequest) {
 
       if (error.message === "AUTH_INVALID") {
         return jsonError(
-          "Your sign-in session is invalid or expired.",
+          "Your sign-in session is invalid or expired. Please sign in again.",
           401
         );
       }
@@ -193,9 +217,20 @@ export async function GET(request: NextRequest) {
           500
         );
       }
+
+      if (error.message === "PROFILE_LOOKUP_FAILED") {
+        return jsonError(
+          "Unable to look up your customer profile.",
+          502
+        );
+      }
     }
 
-    console.error("Customer profile GET error:", error);
+    console.error(
+      "Customer profile GET error:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
+
     return jsonError("Unable to load your customer profile.", 500);
   }
 }
@@ -205,7 +240,11 @@ export async function PATCH(request: NextRequest) {
     const decoded = await authenticate(request);
     const { baseUrl, headers } = getSupabaseConfig();
 
-    const customer = await findCustomer(baseUrl, headers, decoded.uid);
+    const customer = await findCustomer(
+      baseUrl,
+      headers,
+      decoded.uid
+    );
 
     if (!customer) {
       return jsonError(
@@ -231,11 +270,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     const input = body as Record<string, unknown>;
-    const allowedFields = ["full_name", "date_of_birth", "gender"];
+    const allowedFields = [
+      "full_name",
+      "date_of_birth",
+      "gender",
+    ];
 
     if (
       Object.keys(input).length === 0 ||
-      Object.keys(input).some((key) => !allowedFields.includes(key))
+      Object.keys(input).some(
+        (key) => !allowedFields.includes(key)
+      )
     ) {
       return jsonError(
         "Only full name, date of birth and gender can be updated here.",
@@ -288,7 +333,9 @@ export async function PATCH(request: NextRequest) {
     if ("gender" in input) {
       if (
         input.gender !== null &&
-        !["male", "female", "other"].includes(input.gender as string)
+        !["male", "female", "other"].includes(
+          input.gender as string
+        )
       ) {
         return jsonError(
           "Choose Male, Female, Other, or leave it blank.",
@@ -341,7 +388,7 @@ export async function PATCH(request: NextRequest) {
 
       if (error.message === "AUTH_INVALID") {
         return jsonError(
-          "Your sign-in session is invalid or expired.",
+          "Your sign-in session is invalid or expired. Please sign in again.",
           401
         );
       }
@@ -352,9 +399,20 @@ export async function PATCH(request: NextRequest) {
           500
         );
       }
+
+      if (error.message === "PROFILE_LOOKUP_FAILED") {
+        return jsonError(
+          "Unable to look up your customer profile.",
+          502
+        );
+      }
     }
 
-    console.error("Customer profile PATCH error:", error);
+    console.error(
+      "Customer profile PATCH error:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
+
     return jsonError("Unable to save your profile.", 500);
   }
 }
