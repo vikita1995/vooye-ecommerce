@@ -22,6 +22,13 @@ jobs:
       run:
         working-directory: vooye-production
 
+    # Prisma 7 loads prisma.config.ts during npm install's postinstall.
+    # Client generation does not connect to the database, so use CI-only
+    # placeholder URLs rather than production database credentials.
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,9 +46,6 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Validate Prisma schema
-        env:
-          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
-          DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
         run: npx prisma validate
 
       - name: Generate Prisma client
