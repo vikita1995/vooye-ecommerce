@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 type Customer = {
@@ -60,7 +60,8 @@ export default function AccountPage() {
     const supabase = createClient();
     let active = true;
 
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
+      const { data, error: sessionError } = result; {
       if (!active) return;
       if (sessionError) setError(sessionError.message);
       setUser(data.session?.user ?? null);
@@ -68,7 +69,7 @@ export default function AccountPage() {
       else setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!active) return;
       setUser(session?.user ?? null);
       if (session?.access_token) {
