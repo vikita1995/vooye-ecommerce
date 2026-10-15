@@ -1,198 +1,112 @@
-
-import {
-  applicationDefault,
-  getApps,
-  initializeApp,
-} from "firebase-admin/app";
-import {
-  getAuth,
-  type DecodedIdToken,
-} from "firebase-admin/auth";
-import {
-  Prisma,
-  type User,
-  type UserRole,
-} from "@prisma/client";
+import { Prisma, type User, type UserRole } from "@prisma/client";
 import { db } from "@/lib/db";
-
-const FIREBASE_ADMIN_APP_NAME = "vooye-auth";
-
-function adminAuth() {
-  const app =
-    getApps().find(
-      (item) => item.name === FIREBASE_ADMIN_APP_NAME
-    ) ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      FIREBASE_ADMIN_APP_NAME
-    );
-
-  return getAuth(app);
-}
+import { authenticateSupabaseRequest, type VerifiedSupabaseUser } from "@/lib/supabase/verify-token";
 
 function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
-  );
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
-function normalizeEmail(email: string | undefined): string | null {
-  const normalized = email?.trim().toLowerCase();
-  return normalized || null;
+function normalizedEmail(email: string | undefined, uid: string): string {
+  const value = email?.trim().toLowerCase();
+  // Prisma currently requires email. Phone-only Supabase accounts receive a stable
+  // internal placeholder until an email is linked; it is never shown as a verified address.
+  return value || `phone+${uid}@users.vooye.invalid`;
 }
 
-/**
- * Authenticate a Firebase user and return the local database user.
- *
- * This function does not synchronize profile fields for existing users.
- * Existing roles are never changed by authentication.
- */
-export async function authenticate(
-  request: Request
-): Promise<User> {
-  const authorization = request.headers.get("authorization") ?? "";
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  const token = match?.[1]?.trim();
-
-  if (!token) {
-    throw new Error("Authentication required");
-  }
-
-  let decoded: DecodedIdToken;
-
-  try {
-    // Verify signature, expiry and revocation.
-    decoded = await adminAuth().verifyIdToken(token, true);
-  } catch {
-    throw new Error("Authentication invalid or expired");
-  }
-
-  const email = normalizeEmail(decoded.email);
-
-  if (!email) {
-    throw new Error("Verified account email required");
-  }
-
-  // The Firebase UID is the stable identity key.
-  const existingUser = await db.user.findUnique({
-    where: { firebaseUid: decoded.uid },
-  });
+/** Validate the Supabase bearer token, then resolve the existing Prisma account. */
+export async function authenticate(request: Request): Promise<User> {
+  const identity = await authenticateSupabaseRequest(request);
+  const email = normalizedEmail(identity.email, identity.uid);
+  const existingUser = await db.user.findUnique({ where: { firebaseUid: identity.uid } });
 
   if (existingUser) {
-    // Do not update email, display name, or role during authentication.
+    // Never change a persisted role based on user metadata or the request body.
+    if (identity.email && existingUser.email !== email) {
+      try {
+        return await db.user.update({
+          where: { id: existingUser.id },
+          data: { email, displayName: identity.name?.trim() || existingUser.displayName },
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new Error("ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support.");
+        }
+        throw error;
+      }
+    }
     return existingUser;
   }
 
   try {
     return await db.user.create({
       data: {
-        firebaseUid: decoded.uid,
+        // Legacy schema field name retained for compatibility; the value is now a Supabase Auth UUID.
+        firebaseUid: identity.uid,
         email,
-        displayName: decoded.name?.trim() || null,
+        displayName: identity.name?.trim() || null,
         role: "CUSTOMER",
       },
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      // Another concurrent request may have created this UID already.
-      const userCreatedConcurrently = await db.user.findUnique({
-        where: { firebaseUid: decoded.uid },
-      });
-
-      if (userCreatedConcurrently) {
-        return userCreatedConcurrently;
-      }
-
-      // Never automatically link or merge accounts by email.
-      throw new Error(
-        "ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support."
-      );
+      const concurrentUser = await db.user.findUnique({ where: { firebaseUid: identity.uid } });
+      if (concurrentUser) return concurrentUser;
+      throw new Error("ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support.");
     }
-
     throw error;
   }
 }
 
-/**
- * Explicitly synchronize basic profile fields.
- *
- * Call this only from a profile-update flow after validating the
- * requested changes. It cannot change the user's role or Firebase UID.
- */
-export async function syncUserProfile(
-  user: User,
-  decoded: DecodedIdToken
-): Promise<User> {
-  if (user.firebaseUid !== decoded.uid) {
-    throw new Error("Forbidden");
-  }
-
-  const email = normalizeEmail(decoded.email);
-
-  if (!email) {
-    throw new Error("Verified account email required");
-  }
+/** Explicitly sync only basic profile fields; roles and identity keys are immutable here. */
+export async function syncUserProfile(user: User, identity: VerifiedSupabaseUser): Promise<User> {
+  if (user.firebaseUid !== identity.uid) throw new Error("Forbidden");
+  if (!identity.email) return user;
 
   try {
     return await db.user.update({
       where: { id: user.id },
-      data: {
-        email,
-        displayName: decoded.name?.trim() || null,
-      },
+      data: { email: identity.email.trim().toLowerCase(), displayName: identity.name?.trim() || user.displayName },
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      throw new Error(
-        "ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support."
-      );
+      throw new Error("ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support.");
     }
-
     throw error;
   }
 }
 
-/**
- * Check permissions against the role stored in the database.
- * Never take a role from a client request.
- */
 export function requireRole(user: User, roles: UserRole[]): void {
-  if (!roles.includes(user.role)) {
-    throw new Error("Forbidden");
-  }
+  if (!roles.includes(user.role)) throw new Error("Forbidden");
 }
 
-/**
- * Server-side admin allowlist.
- *
- * Configure ADMIN_UIDS as a comma-separated list of Firebase UIDs.
- */
+/** ADMIN_UIDS is a server-side allowlist of Supabase Auth user UUIDs. */
 export function isAdminUid(uid: string): boolean {
-  return (process.env.ADMIN_UIDS ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .includes(uid);
+  return (process.env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(uid);
 }
 
-/**
- * Authenticate the request and require the caller's Firebase UID
- * to be explicitly allowlisted for administrator access.
- *
- * Admin API routes must call this helper themselves.
- */
+async function hasAdminProfile(uid: string): Promise<boolean> {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!baseUrl || !serviceKey) return false;
+
+  const response = await fetch(
+    `${baseUrl}/rest/v1/user_profiles?user_id=eq.${encodeURIComponent(uid)}&select=role&limit=1`,
+    {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    }
+  );
+  if (!response.ok) throw new Error("SUPABASE_CONFIG_MISSING");
+  const rows = (await response.json()) as { role: string }[];
+  return rows[0]?.role === "admin";
+}
+
+/** Require a verified Supabase Auth UUID allowlisted or assigned admin in trusted profile data. */
 export async function requireAdmin(request: Request): Promise<User> {
   const user = await authenticate(request);
-
-  if (!isAdminUid(user.firebaseUid)) {
+  if (!isAdminUid(user.firebaseUid) && !(await hasAdminProfile(user.firebaseUid))) {
     throw new Error("Forbidden");
   }
-
   return user;
 }
