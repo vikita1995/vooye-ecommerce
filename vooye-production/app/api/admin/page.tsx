@@ -3,8 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { createClient } from "@/lib/supabase/client";
 
 type Tab = "sellers" | "products" | "orders";
 
@@ -63,32 +62,15 @@ type Order = {
   items: OrderItem[];
 };
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-function getFirebaseAuth() {
-  const app = getApps().length
-    ? getApp()
-    : initializeApp(firebaseConfig);
-
-  return getAuth(app);
-}
-
 async function authorizedFetch(
   path: string,
   init: RequestInit = {}
 ) {
-  const user = getFirebaseAuth().currentUser;
-
-  if (!user) {
+  const { data: { session }, error: sessionError } = await createClient().auth.getSession();
+  if (sessionError || !session?.access_token) {
     throw new Error("Sign in with your administrator account first.");
   }
-
-  const token = await user.getIdToken();
+  const token = session.access_token;
 
   const response = await fetch(path, {
     ...init,
@@ -176,13 +158,17 @@ export default function AdminPortal() {
   }, [tab, sellerFilter, productFilter, orderFilter]);
 
   useEffect(() => {
-    if (getFirebaseAuth().currentUser) {
-      void loadData();
-      return;
-    }
-
-    const unsubscribe = getFirebaseAuth().onAuthStateChanged((user) => {
-      if (user) {
+    let active = true;
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) setError("Unable to verify your sign-in session.");
+      if (data.session) void loadData();
+      else setError("Sign in before accessing the admin console.");
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      if (session) {
         void loadData();
       } else {
         setError("Sign in before accessing the admin console.");
@@ -191,8 +177,7 @@ export default function AdminPortal() {
         setOrders([]);
       }
     });
-
-    return unsubscribe;
+    return () => { active = false; subscription.unsubscribe(); };
   }, [loadData]);
 
   async function reviewSeller(
