@@ -15,7 +15,7 @@ function normalizedEmail(email: string | undefined, uid: string): string {
 
 /** Validate the Supabase bearer token, then resolve the existing Prisma account. */
 export async function authenticate(request: Request): Promise<User> {
-  let identity;
+  let identity: VerifiedSupabaseUser;
   try {
     identity = await authenticateSupabaseRequest(request);
   } catch (cause) {
