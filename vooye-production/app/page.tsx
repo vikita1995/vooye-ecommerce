@@ -124,10 +124,10 @@ export default async function Home() {
             {products.map((product) => (
               <article className="product" key={product.id}>
                 <div className="product-image">
-                  {product.imageUrl ? (
+                  {(product.imageUrl || product.slug.startsWith("vooye-gold-arched-floor-mirror")) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={product.imageUrl}
+                      src={product.imageUrl || "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/01-front-angle.jpeg"}
                       alt={product.name}
                       loading="lazy"
                       style={{
