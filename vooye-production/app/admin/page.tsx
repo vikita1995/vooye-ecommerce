@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged, getIdToken, type User } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 type SellerStatus = "pending" | "approved" | "rejected" | "suspended";
 type SellerApplication = {
@@ -43,26 +43,26 @@ export default function AdminPortal() {
 
   useEffect(() => {
     let active = true;
-    let unsubscribe: (() => void) | undefined;
-    try {
-      unsubscribe = onAuthStateChanged(getFirebaseAuth(), (nextUser) => {
-        if (!active) return;
-        setUser(nextUser);
-        setAuthReady(true);
-      });
-    } catch {
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) setError("Unable to verify your sign-in session.");
+      setUser(data.session?.user ?? null);
       setAuthReady(true);
-      setError("Firebase authentication is not configured.");
-    }
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   const authorizedFetch = useCallback(async (url: string, init: RequestInit = {}) => {
     if (!user) throw new Error("Sign in with an administrator account first.");
-    const token = await getIdToken(user);
+    const { data: { session }, error: sessionError } = await createClient().auth.getSession();
+    if (sessionError || !session?.access_token) throw new Error("Please sign in again.");
+    const token = session.access_token;
     const response = await fetch(url, {
       ...init,
       headers: {
