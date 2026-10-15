@@ -84,7 +84,7 @@ export default function OrdersPage() {
       });
     };
     void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error } = result; {
+      const { data, error } = result;
       if (!active) return;
       if (error) setMessage("Your session could not be verified. Please sign in again.");
       applySession(data.session);
