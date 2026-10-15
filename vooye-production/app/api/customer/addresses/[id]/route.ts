@@ -1,46 +1,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { applicationDefault, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function firebaseAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-address-item") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-address-item"
-    );
-
-  return getAuth(app);
-}
 
 function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
 async function context(request: NextRequest) {
-  const authorization = request.headers.get("authorization") ?? "";
-  const token = authorization.startsWith("Bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-
-  if (!token) throw new Error("AUTH_REQUIRED");
-
-  let decoded;
-  try {
-    decoded = await firebaseAuth().verifyIdToken(token);
-  } catch {
-    throw new Error("AUTH_INVALID");
-  }
-
+  const decoded = await authenticateSupabaseRequest(request);
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("CONFIG_MISSING");
