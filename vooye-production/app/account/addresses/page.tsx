@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 type Address = {
@@ -71,12 +71,13 @@ export default function AddressesPage() {
         }
       });
     };
-    void supabase.auth.getSession().then(({ data, error }) => {
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
+      const { data, error } = result; {
       if (!active) return;
       if (error) setMessage("Your session could not be verified. Please sign in again.");
       applySession(data.session);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (active) applySession(session);
     });
     return () => { active = false; subscription.unsubscribe(); };
