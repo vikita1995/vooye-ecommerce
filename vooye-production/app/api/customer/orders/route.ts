@@ -1,26 +1,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { applicationDefault, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function firebaseAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-customer-orders") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-customer-orders"
-    );
-
-  return getAuth(app);
-}
 
 function fail(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -28,18 +11,13 @@ function fail(message: string, status: number) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authorization = request.headers.get("authorization") ?? "";
-    const token = authorization.startsWith("Bearer ")
-      ? authorization.slice(7).trim()
-      : "";
-
-    if (!token) return fail("Please sign in to view your orders.", 401);
-
     let decoded;
     try {
-      decoded = await firebaseAuth().verifyIdToken(token);
-    } catch {
-      return fail("Your sign-in session has expired. Please sign in again.", 401);
+      decoded = await authenticateSupabaseRequest(request);
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : "";
+      if (reason === "AUTH_SERVICE_UNAVAILABLE") return fail("Authentication service is temporarily unavailable.", 503);
+      return fail(reason === "AUTH_REQUIRED" ? "Please sign in to view your orders." : "Your sign-in session has expired. Please sign in again.", 401);
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
