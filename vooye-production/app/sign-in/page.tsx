@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -10,7 +10,7 @@ function safeNextPath(value: string | null) {
   return value;
 }
 
-export default function SignInPage() {
+function SignInForm() {
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
   const [mode, setMode] = useState<"sign-in" | "sign-up" | "phone" | "reset">("sign-in");
@@ -139,5 +139,14 @@ export default function SignInPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<main className="wrap section"><p>Loading sign in…</p></main>}>
+      <SignInForm />
+    </Suspense>
   );
 }
