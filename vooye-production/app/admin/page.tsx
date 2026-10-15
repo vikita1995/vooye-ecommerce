@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 type SellerStatus = "pending" | "approved" | "rejected" | "suspended";
@@ -42,13 +42,14 @@ export default function AdminPortal() {
   useEffect(() => {
     let active = true;
     const supabase = createClient();
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
+      const { data, error: sessionError } = result; {
       if (!active) return;
       if (sessionError) setError("Unable to verify your sign-in session.");
       setUser(data.session?.user ?? null);
       setAuthReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!active) return;
       setUser(session?.user ?? null);
       setAuthReady(true);
