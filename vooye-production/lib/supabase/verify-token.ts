@@ -3,12 +3,16 @@ export type VerifiedSupabaseUser = {
   email?: string;
   name?: string;
   phone_number?: string;
+  email_verified: boolean;
+  phone_verified: boolean;
 };
 
 type SupabaseAuthUser = {
   id: string;
   email?: string | null;
   phone?: string | null;
+  email_confirmed_at?: string | null;
+  phone_confirmed_at?: string | null;
   user_metadata?: Record<string, unknown> | null;
 };
 
@@ -49,6 +53,8 @@ export async function verifySupabaseAccessToken(token: string): Promise<Verified
     email: user.email ?? undefined,
     name: typeof fullName === "string" ? fullName : undefined,
     phone_number: user.phone ?? undefined,
+    email_verified: Boolean(user.email_confirmed_at),
+    phone_verified: Boolean(user.phone_confirmed_at),
   };
 }
 
