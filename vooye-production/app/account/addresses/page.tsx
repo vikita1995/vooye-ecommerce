@@ -58,7 +58,18 @@ export default function AddressesPage() {
         setLoading(false);
         return;
       }
-      setToken(session.access_token);
+      void fetch("/api/customer/profile", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("Unable to initialize your customer profile.");
+        if (active) setToken(session.access_token);
+      }).catch((cause) => {
+        if (active) {
+          setMessage(cause instanceof Error ? cause.message : "Unable to initialize your customer profile.");
+          setLoading(false);
+        }
+      });
     };
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return;
