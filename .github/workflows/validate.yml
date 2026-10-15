@@ -38,6 +38,8 @@ jobs:
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: vooye-ci
           NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
           FIREBASE_ADMIN_PROJECT_ID: vooye-ci
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
           RAZORPAY_KEY_ID: rzp_test_placeholder
           RAZORPAY_KEY_SECRET: placeholder
           RAZORPAY_WEBHOOK_SECRET: placeholder

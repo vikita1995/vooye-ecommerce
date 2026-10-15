@@ -6,7 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-RUN npm ci --no-audit --no-fund
+# Reconcile the lockfile with the pinned manifest before the clean install.
+RUN npm install --package-lock-only --ignore-scripts --no-audit --no-fund \
+    && npm ci --no-audit --no-fund
 
 
 # Stage 2: Build Next.js application

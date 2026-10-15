@@ -1,32 +1,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { applicationDefault, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function firebaseAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-customer-addresses") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-customer-addresses"
-    );
-
-  return getAuth(app);
-}
 
 function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
 async function getContext(request: NextRequest) {
+
+  const decoded = await authenticateSupabaseRequest(request);
+=======
   const authorization = request.headers.get("authorization") ?? "";
   const token = authorization.startsWith("Bearer ")
     ? authorization.slice(7).trim()
@@ -78,6 +64,7 @@ function handleError(cause: unknown) {
   const known: Record<string, { message: string; status: number }> = {
     AUTH_REQUIRED: { message: "Please sign in first.", status: 401 },
     AUTH_INVALID: { message: "Your session has expired. Please sign in again.", status: 401 },
+    AUTH_SERVICE_UNAVAILABLE: { message: "Authentication service is temporarily unavailable.", status: 503 },
     CONFIG_MISSING: { message: "Address service is not configured.", status: 500 },
     CUSTOMER_LOOKUP_FAILED: { message: "Unable to verify your customer account.", status: 502 },
     CUSTOMER_NOT_FOUND: { message: "Customer profile not found. Open your account page first.", status: 404 },

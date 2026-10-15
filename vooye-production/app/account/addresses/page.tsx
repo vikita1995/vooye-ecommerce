@@ -3,8 +3,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import type { Session } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 type Address = {
   id: string;
@@ -48,22 +48,38 @@ export default function AddressesPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    return onAuthStateChanged(getFirebaseAuth(), async (user) => {
+    const supabase = createClient();
+    let active = true;
+    const applySession = (session: Session | null) => {
       setAuthReady(true);
-      if (!user) {
+      if (!session) {
         setToken("");
         setAddresses([]);
         setLoading(false);
         return;
       }
-
-      try {
-        setToken(await user.getIdToken());
-      } catch {
-        setMessage("Your sign-in session could not be verified. Please sign in again.");
-        setLoading(false);
-      }
+      void fetch("/api/customer/profile", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("Unable to initialize your customer profile.");
+        if (active) setToken(session.access_token);
+      }).catch((cause) => {
+        if (active) {
+          setMessage(cause instanceof Error ? cause.message : "Unable to initialize your customer profile.");
+          setLoading(false);
+        }
+      });
+    };
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setMessage("Your session could not be verified. Please sign in again.");
+      applySession(data.session);
     });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) applySession(session);
+    });
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   const loadAddresses = useCallback(async () => {

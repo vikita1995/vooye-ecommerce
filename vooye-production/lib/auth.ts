@@ -15,7 +15,15 @@ function normalizedEmail(email: string | undefined, uid: string): string {
 
 /** Validate the Supabase bearer token, then resolve the existing Prisma account. */
 export async function authenticate(request: Request): Promise<User> {
-  const identity = await authenticateSupabaseRequest(request);
+  let identity: VerifiedSupabaseUser;
+  try {
+    identity = await authenticateSupabaseRequest(request);
+  } catch (cause) {
+    const code = cause instanceof Error ? cause.message : "";
+    if (code === "AUTH_REQUIRED") throw new Error("Authentication required");
+    if (code === "AUTH_INVALID") throw new Error("Authentication invalid or expired");
+    throw cause;
+  }
   const email = normalizedEmail(identity.email, identity.uid);
   const existingUser = await db.user.findUnique({ where: { firebaseUid: identity.uid } });
 

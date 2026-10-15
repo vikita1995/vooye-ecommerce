@@ -1,30 +1,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  applicationDefault,
-  getApps,
-  initializeApp,
-} from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function adminAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-customer-phone") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-customer-phone"
-    );
-
-  return getAuth(app);
-}
 
 function fail(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -32,21 +11,7 @@ function fail(message: string, status: number) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authorization = request.headers.get("authorization") ?? "";
-    const token = authorization.startsWith("Bearer ")
-      ? authorization.slice(7).trim()
-      : "";
-
-    if (!token) return fail("Please sign in first.", 401);
-
-    let decoded;
-
-    try {
-      decoded = await adminAuth().verifyIdToken(token, true);
-    } catch {
-      return fail("Your session is invalid or expired. Please sign in again.", 401);
-    }
-
+    const decoded = await authenticateSupabaseRequest(request);
     let body: unknown;
 
     try {
@@ -153,7 +118,11 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, phone: rows[0] });
   } catch (cause) {
-    console.error("Customer phone API error:", cause);
+    const reason = cause instanceof Error ? cause.message : "";
+    if (reason === "AUTH_REQUIRED") return fail("Please sign in first.", 401);
+    if (reason === "AUTH_INVALID") return fail("Your session is invalid or expired. Please sign in again.", 401);
+    if (reason === "AUTH_SERVICE_UNAVAILABLE") return fail("Authentication service is temporarily unavailable.", 503);
+    console.error("Customer phone API error:", reason || "Unknown error");
     return fail("Unable to update your phone number.", 500);
   }
 }
