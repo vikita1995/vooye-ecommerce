@@ -1,9 +1,9 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   apiError,
   handleApiError,
   requireUser,
+  rateLimitRequest,
   supabaseRest,
 } from "@/lib/seller-server";
 
@@ -111,8 +111,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate the request first.
     const user = await requireUser(request);
 
+    // Limit each authenticated seller to 10 product-creation
+    // requests per 60-second window.
+    const rateLimitResponse = rateLimitRequest(request, {
+      scope: "seller-product-create",
+      key: user.uid,
+      limit: 10,
+      windowMs: 60_000,
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    // Only approved sellers can create products.
     const permission = await getApprovedSeller(user.uid);
 
     if (!permission.ok) {

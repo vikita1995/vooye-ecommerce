@@ -43,9 +43,8 @@ async function authenticate(
   }
 
   try {
-    // Verifies token signature, issuer, audience and expiry.
-    // Revocation checking is intentionally disabled for this request.
-    return await getFirebaseAuth().verifyIdToken(token);
+    // Verify the token and check whether it has been revoked.
+    return await getFirebaseAuth().verifyIdToken(token, true);
   } catch (cause) {
     // Never log the token itself.
     console.error(
@@ -119,8 +118,7 @@ export async function GET(request: NextRequest) {
     const decoded = await authenticate(request);
     const { baseUrl, headers } = getSupabaseConfig();
 
-    // Always look up by the authenticated Firebase UID first.
-    // This avoids creating a second profile when the UID is unchanged.
+    // Look up the profile using the authenticated Firebase UID.
     let customer = await findCustomer(
       baseUrl,
       headers,
@@ -144,7 +142,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Phone-only Firebase accounts may not have a display name.
-      // This requires customers.full_name to allow NULL in Supabase.
+      // The customers.full_name column must allow NULL for these accounts.
       const newCustomer = {
         firebase_uid: decoded.uid,
         full_name: fullName,
@@ -172,8 +170,7 @@ export async function GET(request: NextRequest) {
       );
 
       if (!createResponse.ok) {
-        // Do not log database response bodies because they may contain
-        // information that should not be exposed in application logs.
+        // Avoid logging database response bodies.
         console.error(
           "Customer profile creation failed:",
           createResponse.status

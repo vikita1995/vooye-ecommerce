@@ -8,7 +8,11 @@ import {
   getAuth,
   type DecodedIdToken,
 } from "firebase-admin/auth";
-import { Prisma, type User, type UserRole } from "@prisma/client";
+import {
+  Prisma,
+  type User,
+  type UserRole,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 
 const FIREBASE_ADMIN_APP_NAME = "vooye-auth";
@@ -105,8 +109,7 @@ export async function authenticate(
         return userCreatedConcurrently;
       }
 
-      // The email may belong to a different Firebase UID.
-      // Never automatically link or merge those accounts.
+      // Never automatically link or merge accounts by email.
       throw new Error(
         "ACCOUNT_EMAIL_CONFLICT: This email is already associated with another account. Contact support."
       );
@@ -159,7 +162,7 @@ export async function syncUserProfile(
  * Check permissions against the role stored in the database.
  * Never take a role from a client request.
  */
-export function requireRole(user: User, roles: UserRole[]) {
+export function requireRole(user: User, roles: UserRole[]): void {
   if (!roles.includes(user.role)) {
     throw new Error("Forbidden");
   }
@@ -167,6 +170,7 @@ export function requireRole(user: User, roles: UserRole[]) {
 
 /**
  * Server-side admin allowlist.
+ *
  * Configure ADMIN_UIDS as a comma-separated list of Firebase UIDs.
  */
 export function isAdminUid(uid: string): boolean {
@@ -175,4 +179,20 @@ export function isAdminUid(uid: string): boolean {
     .map((value) => value.trim())
     .filter(Boolean)
     .includes(uid);
+}
+
+/**
+ * Authenticate the request and require the caller's Firebase UID
+ * to be explicitly allowlisted for administrator access.
+ *
+ * Admin API routes must call this helper themselves.
+ */
+export async function requireAdmin(request: Request): Promise<User> {
+  const user = await authenticate(request);
+
+  if (!isAdminUid(user.firebaseUid)) {
+    throw new Error("Forbidden");
+  }
+
+  return user;
 }
