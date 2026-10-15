@@ -23,6 +23,13 @@ jobs:
       run:
         working-directory: vooye-production
 
+    # Prisma 7 loads prisma.config.ts during npm install's postinstall.
+    # This workflow only generates the client and does not run migrations;
+    # the placeholder URL avoids exposing production database credentials.
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
