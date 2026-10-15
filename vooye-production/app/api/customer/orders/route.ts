@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     let decoded;
     try {
-      decoded = await firebaseAuth().verifyIdToken(token);
+      decoded = await firebaseAuth().verifyIdToken(token, true);
     } catch {
       return fail("Your sign-in session has expired. Please sign in again.", 401);
     }
