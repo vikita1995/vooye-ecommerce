@@ -1,58 +1,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  applicationDefault,
-  getApps,
-  initializeApp,
-} from "firebase-admin/app";
-import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function getFirebaseAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-customer-profile") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-customer-profile"
-    );
-
-  return getAuth(app);
-}
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function authenticate(
-  request: NextRequest
-): Promise<DecodedIdToken> {
-  const authorization = request.headers.get("authorization");
-  const token = authorization?.startsWith("Bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-
-  if (!token) {
-    throw new Error("AUTH_REQUIRED");
-  }
-
-  try {
-    // Verify the token and check whether it has been revoked.
-    return await getFirebaseAuth().verifyIdToken(token, true);
-  } catch (cause) {
-    // Never log the token itself.
-    console.error(
-      "Firebase ID token verification failed:",
-      cause instanceof Error ? cause.message : "Unknown verification error"
-    );
-    throw new Error("AUTH_INVALID");
-  }
+async function authenticate(request: NextRequest) {
+  return authenticateSupabaseRequest(request);
 }
 
 function getSupabaseConfig() {
