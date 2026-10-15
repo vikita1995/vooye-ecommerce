@@ -13,17 +13,16 @@ export async function GET(request: NextRequest) {
   try {
     let decoded: Awaited<ReturnType<typeof authenticateSupabaseRequest>>;
     try {
-
       decoded = await authenticateSupabaseRequest(request);
     } catch (cause) {
       const reason = cause instanceof Error ? cause.message : "";
-      if (reason === "AUTH_SERVICE_UNAVAILABLE") return fail("Authentication service is temporarily unavailable.", 503);
-      return fail(reason === "AUTH_REQUIRED" ? "Please sign in to view your orders." : "Your sign-in session has expired. Please sign in again.", 401);
-
-      decoded = await firebaseAuth().verifyIdToken(token, true);
-    } catch {
+      if (reason === "AUTH_SERVICE_UNAVAILABLE" || reason === "SUPABASE_CONFIG_MISSING") {
+        return fail("Authentication service is temporarily unavailable.", 503);
+      }
+      if (reason === "AUTH_REQUIRED") {
+        return fail("Please sign in to view your orders.", 401);
+      }
       return fail("Your sign-in session has expired. Please sign in again.", 401);
-
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
