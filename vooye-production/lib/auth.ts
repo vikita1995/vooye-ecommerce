@@ -1,4 +1,4 @@
-import { Prisma, type User, type UserRole } from "@prisma/client";
+import { Prisma, type User, type UserRole } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { authenticateSupabaseRequest, type VerifiedSupabaseUser } from "@/lib/supabase/verify-token";
 
