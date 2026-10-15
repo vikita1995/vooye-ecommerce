@@ -160,13 +160,14 @@ export default function AdminPortal() {
   useEffect(() => {
     let active = true;
     const supabase = createClient();
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
+      const { data, error: sessionError } = result; {
       if (!active) return;
       if (sessionError) setError("Unable to verify your sign-in session.");
       if (data.session) void loadData();
       else setError("Sign in before accessing the admin console.");
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!active) return;
       if (session) {
         void loadData();
