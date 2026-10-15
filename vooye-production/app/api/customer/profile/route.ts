@@ -159,6 +159,14 @@ export async function GET(request: NextRequest) {
         return jsonError("Authentication required.", 401);
       }
 
+      if (error.message === "AUTH_SERVICE_UNAVAILABLE") {
+        return jsonError("Authentication service is temporarily unavailable.", 503);
+      }
+
+      if (error.message === "AUTH_SERVICE_UNAVAILABLE") {
+        return jsonError("Authentication service is temporarily unavailable.", 503);
+      }
+
       if (error.message === "AUTH_INVALID") {
         return jsonError(
           "Your sign-in session is invalid or expired. Please sign in again.",
