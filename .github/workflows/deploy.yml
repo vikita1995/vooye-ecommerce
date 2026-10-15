@@ -93,3 +93,14 @@ jobs:
             --allow-unauthenticated \
             --port 8080 \
             --quiet
+
+      - name: Setup Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Deploy Firebase Hosting
+        working-directory: .
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting --project vooye-510916 --non-interactive
