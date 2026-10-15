@@ -26,8 +26,6 @@ type AuditEvent = {
   created_at: string;
 };
 
-const statuses: SellerStatus[] = ["pending", "approved", "rejected", "suspended"];
-
 export default function AdminPortal() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
