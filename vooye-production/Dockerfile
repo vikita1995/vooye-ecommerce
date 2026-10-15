@@ -1,4 +1,3 @@
-
 # Stage 1: Install dependencies
 FROM node:22-alpine AS deps
 
@@ -22,6 +21,12 @@ WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Next.js evaluates some server modules while collecting route/page data.
+# The DB client currently validates DATABASE_URL at module initialization.
+# Set a build-only placeholder; it is not copied into the final runtime image.
+ENV DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+ENV DIRECT_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+
 # Public Firebase configuration
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
 ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
@@ -39,9 +44,6 @@ ENV NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
 
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-
-# Keep Prisma config evaluable during build without exposing real credentials.
-ENV DIRECT_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
