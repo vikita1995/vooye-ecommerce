@@ -1,30 +1,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  applicationDefault,
-  getApps,
-  initializeApp,
-} from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function adminAuth() {
-  const app =
-    getApps().find((item) => item.name === "vooye-customer-phone") ??
-    initializeApp(
-      {
-        credential: applicationDefault(),
-        projectId:
-          process.env.FIREBASE_ADMIN_PROJECT_ID ??
-          process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      "vooye-customer-phone"
-    );
-
-  return getAuth(app);
-}
 
 function fail(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -32,21 +11,7 @@ function fail(message: string, status: number) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authorization = request.headers.get("authorization") ?? "";
-    const token = authorization.startsWith("Bearer ")
-      ? authorization.slice(7).trim()
-      : "";
-
-    if (!token) return fail("Please sign in first.", 401);
-
-    let decoded;
-
-    try {
-      decoded = await adminAuth().verifyIdToken(token, true);
-    } catch {
-      return fail("Your session is invalid or expired. Please sign in again.", 401);
-    }
-
+    const decoded = await authenticateSupabaseRequest(request);
     let body: unknown;
 
     try {
