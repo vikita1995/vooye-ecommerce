@@ -36,7 +36,7 @@ async function getContext(request: NextRequest) {
 
   let decoded;
   try {
-    decoded = await firebaseAuth().verifyIdToken(token);
+    decoded = await firebaseAuth().verifyIdToken(token, true);
   } catch {
     throw new Error("AUTH_INVALID");
   }
