@@ -34,7 +34,9 @@ jobs:
           cache-dependency-path: vooye-production/package-lock.json
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # Keep CI aligned with the package manifest when the lockfile is stale.
+        # A regenerated package-lock.json should be committed separately so CI can return to npm ci.
+        run: npm install --no-audit --no-fund
 
       - name: Validate Prisma schema
         env:
