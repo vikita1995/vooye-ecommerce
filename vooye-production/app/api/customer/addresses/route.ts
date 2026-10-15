@@ -10,23 +10,7 @@ function error(message: string, status: number) {
 }
 
 async function getContext(request: NextRequest) {
-
   const decoded = await authenticateSupabaseRequest(request);
-=======
-  const authorization = request.headers.get("authorization") ?? "";
-  const token = authorization.startsWith("Bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-
-  if (!token) throw new Error("AUTH_REQUIRED");
-
-  let decoded;
-  try {
-    decoded = await firebaseAuth().verifyIdToken(token, true);
-  } catch {
-    throw new Error("AUTH_INVALID");
-  }
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -43,14 +27,9 @@ async function getContext(request: NextRequest) {
     `${url}/rest/v1/customers?firebase_uid=eq.${encodeURIComponent(decoded.uid)}&select=id,status`,
     { headers, cache: "no-store" }
   );
-
   if (!response.ok) throw new Error("CUSTOMER_LOOKUP_FAILED");
 
-  const customers = (await response.json()) as {
-    id: string;
-    status: string;
-  }[];
-
+  const customers = (await response.json()) as { id: string; status: string }[];
   const customer = customers[0];
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (customer.status !== "active") throw new Error("CUSTOMER_INACTIVE");
