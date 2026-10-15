@@ -1,20 +1,12 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { verifyIdTokenMock } = vi.hoisted(() => ({
-  verifyIdTokenMock: vi.fn(),
+const { authenticateSupabaseRequestMock } = vi.hoisted(() => ({
+  authenticateSupabaseRequestMock: vi.fn(),
 }));
 
-vi.mock("firebase-admin/app", () => ({
-  applicationDefault: vi.fn(() => ({})),
-  getApps: vi.fn(() => []),
-  initializeApp: vi.fn(() => ({ name: "customer-profile-test" })),
-}));
-
-vi.mock("firebase-admin/auth", () => ({
-  getAuth: vi.fn(() => ({
-    verifyIdToken: verifyIdTokenMock,
-  })),
+vi.mock("@/lib/supabase/verify-token", () => ({
+  authenticateSupabaseRequest: authenticateSupabaseRequestMock,
 }));
 
 import {
@@ -22,7 +14,7 @@ import {
   PATCH as patchProfile,
 } from "../app/api/customer/profile/route";
 
-const TEST_UID = "firebase-user-123";
+const TEST_UID = "supabase-user-123";
 const TEST_EMAIL = "customer@example.com";
 
 type Customer = {
@@ -59,7 +51,7 @@ function customer(overrides: Partial<Customer> = {}): Customer {
 function request(
   method: "GET" | "PATCH",
   body?: Record<string, unknown>,
-  token = "valid-firebase-token",
+  token = "valid-supabase-token",
 ) {
   return new NextRequest("http://localhost/api/customer/profile", {
     method,
@@ -81,7 +73,6 @@ function jsonResponse(value: unknown, status = 200) {
 function configureEnvironment() {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.test";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
-  process.env.FIREBASE_ADMIN_PROJECT_ID = "vooye-test";
 }
 
 describe("customer profile API", () => {
@@ -91,10 +82,11 @@ describe("customer profile API", () => {
     vi.clearAllMocks();
     configureEnvironment();
 
-    verifyIdTokenMock.mockResolvedValue({
+    authenticateSupabaseRequestMock.mockResolvedValue({
       uid: TEST_UID,
       email: TEST_EMAIL,
       email_verified: true,
+      phone_verified: false,
       name: "Test Customer",
     });
 
@@ -180,8 +172,8 @@ describe("customer profile API", () => {
     ).toBe(false);
   });
 
-  it("returns 401 for an invalid Firebase token without calling Supabase", async () => {
-    verifyIdTokenMock.mockRejectedValueOnce(new Error("invalid token"));
+  it("returns 401 for an invalid Supabase Auth token without calling the data API", async () => {
+    authenticateSupabaseRequestMock.mockRejectedValueOnce(new Error("AUTH_INVALID"));
 
     const response = await getProfile(
       request("GET", undefined, "invalid-token"),
