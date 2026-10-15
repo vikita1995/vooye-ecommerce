@@ -140,7 +140,7 @@ export default function AdminPortal() {
   if (!user) {
     return (
       <main className="wrap">
-        <header className="top"><Link className="brand" href="/">VOOYE</Link><Link href="/sign-in">Sign in</Link></header>
+        <header className="top"><Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link><Link href="/sign-in">Sign in</Link></header>
         <section className="section"><h1>Admin console</h1><p>Sign in with your administrator account to continue.</p><Link href="/sign-in">Go to sign in</Link></section>
       </main>
     );
