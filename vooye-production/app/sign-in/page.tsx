@@ -1,322 +1,142 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  GoogleAuthProvider,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  signInWithPopup,
-  type ConfirmationResult,
-} from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import { useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+function safeNextPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/account";
+  return value;
+}
 
 export default function SignInPage() {
-  const [busy, setBusy] = useState(false);
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
+  const [mode, setMode] = useState<"sign-in" | "sign-up" | "phone" | "reset">("sign-in");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [confirmation, setConfirmation] =
-    useState<ConfirmationResult | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-
-  useEffect(() => {
-    return () => {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-    };
-  }, []);
-
-  async function signInWithGoogle() {
-    setBusy(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const auth = getFirebaseAuth();
-      const provider = new GoogleAuthProvider();
-
-      await signInWithPopup(auth, provider);
-      window.location.assign("/account");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to sign in with Google."
-      );
-    } finally {
-      setBusy(false);
-    }
+  async function run(action: () => Promise<void>) {
+    setBusy(true); setError(""); setMessage("");
+    try { await action(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to complete authentication."); }
+    finally { setBusy(false); }
   }
 
-  async function sendOtp() {
-    setBusy(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const auth = getFirebaseAuth();
-      const normalizedPhone = phone.trim();
-
-      // International format: +919876543210
-      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
-        throw new Error(
-          "Enter a valid phone number with country code, e.g. +919876543210."
-        );
+  async function submitEmail(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await run(async () => {
+      const supabase = createClient();
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/auth/callback?next=%2Faccount%2Freset-password`,
+        });
+        if (error) throw error;
+        setMessage("Password reset instructions have been sent if the account exists.");
+        return;
       }
 
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = new RecaptchaVerifier(
-          auth,
-          "phone-recaptcha",
-          { size: "normal" }
-        );
-
-        await recaptchaRef.current.render();
+      if (mode === "sign-up") {
+        if (fullName.trim().length < 2) throw new Error("Enter your full name.");
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: { full_name: fullName.trim() },
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+          },
+        });
+        if (error) throw error;
+        if (data.session) window.location.assign(nextPath);
+        else setMessage("Check your email to confirm your account, then return here to sign in.");
+        return;
       }
 
-      const result = await signInWithPhoneNumber(
-        auth,
-        normalizedPhone,
-        recaptchaRef.current
-      );
-
-      setConfirmation(result);
-      setMessage("Verification code sent. Check your phone.");
-    } catch (err) {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to send verification code."
-      );
-    } finally {
-      setBusy(false);
-    }
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) throw error;
+      if (!data.session) throw new Error("No session was created. Please try again.");
+      window.location.assign(nextPath);
+    });
   }
 
-  async function verifyOtp() {
-    setBusy(true);
-    setError("");
-    setMessage("");
-
-    try {
-      if (!confirmation) {
-        throw new Error("Request a verification code first.");
-      }
-
-      if (!/^\d{6}$/.test(otp.trim())) {
-        throw new Error("Enter the 6-digit verification code.");
-      }
-
-      await confirmation.confirm(otp.trim());
-      window.location.assign("/account");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to verify the code. Please try again."
-      );
-    } finally {
-      setBusy(false);
-    }
+  async function googleSignIn() {
+    await run(async () => {
+      const { error } = await createClient().auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
+      });
+      if (error) throw error;
+    });
   }
 
-  function useDifferentNumber() {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
+  async function sendPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await run(async () => {
+      const normalized = phone.trim();
+      if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
+      const { error } = await createClient().auth.signInWithOtp({ phone: normalized, options: { shouldCreateUser: true } });
+      if (error) throw error;
+      setOtpSent(true);
+      setMessage("Verification code sent. Enter the code from your SMS.");
+    });
+  }
 
-    setConfirmation(null);
-    setOtp("");
-    setError("");
-    setMessage("");
+  async function verifyPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await run(async () => {
+      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit code.");
+      const { data, error } = await createClient().auth.verifyOtp({ phone: phone.trim(), token: otp.trim(), type: "sms" });
+      if (error) throw error;
+      if (!data.session) throw new Error("Verification succeeded but no session was returned.");
+      window.location.assign(nextPath);
+    });
   }
 
   return (
     <main className="wrap">
       <header className="top">
-        <Link className="brand" href="/">
-          VOOYE
-        </Link>
-
-        <nav className="nav">
-          <Link href="/">Shop</Link>
-          <Link href="/account">My account</Link>
-        </nav>
+        <Link className="brand" href="/">VOOYE</Link>
+        <nav className="nav"><Link href="/">Shop</Link><Link href="/seller">Become a seller</Link></nav>
       </header>
-
-      <section
-        className="section"
-        style={{ maxWidth: 480, margin: "40px auto" }}
-      >
+      <section className="section" style={{ maxWidth: 480, margin: "40px auto" }}>
         <div className="eyebrow">YOUR ACCOUNT</div>
-
-        <h1>Welcome to Vooye</h1>
-
-        <p className="muted">
-          Sign in to manage your profile, addresses and orders.
-        </p>
-
-        {/* Google sign-in */}
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={busy}
-          style={{
-            width: "100%",
-            padding: 14,
-            marginTop: 20,
-            cursor: busy ? "wait" : "pointer",
-          }}
-        >
-          {busy ? "Please wait…" : "Continue with Google"}
-        </button>
-
-        {/* Divider */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            margin: "24px 0",
-          }}
-        >
-          <div style={{ height: 1, background: "#ddd", flex: 1 }} />
-          <span className="muted">OR</span>
-          <div style={{ height: 1, background: "#ddd", flex: 1 }} />
-        </div>
-
-        {/* Phone sign-in */}
-        <h2 style={{ fontSize: 20 }}>Continue with mobile</h2>
-
-        <p className="muted">
-          Enter your phone number with country code to receive a
-          verification code by SMS.
-        </p>
-
-        <label htmlFor="phone">Mobile number</label>
-
-        <input
-          id="phone"
-          type="tel"
-          autoComplete="tel"
-          placeholder="+919876543210"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          disabled={busy || confirmation !== null}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: 12,
-            marginTop: 8,
-            boxSizing: "border-box",
-          }}
-        />
-
-        {!confirmation ? (
-          <button
-            type="button"
-            onClick={sendOtp}
-            disabled={busy || !phone.trim()}
-            style={{
-              width: "100%",
-              padding: 14,
-              marginTop: 14,
-              cursor: busy ? "wait" : "pointer",
-            }}
-          >
-            {busy ? "Sending code…" : "Send verification code"}
+        <h1>{mode === "sign-up" ? "Create your Vooye account" : mode === "reset" ? "Reset your password" : mode === "phone" ? "Continue with mobile" : "Welcome to Vooye"}</h1>
+        <p className="muted">Sign in to manage your profile, delivery addresses and orders.</p>
+        {mode !== "phone" && mode !== "reset" && (
+          <button type="button" onClick={() => void googleSignIn()} disabled={busy} style={{ width: "100%", padding: 14, marginTop: 20 }}>
+            {busy ? "Please wait…" : "Continue with Google"}
           </button>
+        )}
+        {mode !== "phone" && mode !== "reset" && <p className="muted" style={{ textAlign: "center" }}>or use email and password</p>}
+        {mode !== "phone" ? (
+          <form className="stack" onSubmit={submitEmail}>
+            {mode === "sign-up" && <label className="field">Full name<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} minLength={2} maxLength={100} required /></label>}
+            <label className="field">Email address<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} /></label>
+            {mode !== "reset" && <label className="field">Password<input type="password" autoComplete={mode === "sign-up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={128} required /></label>}
+            <button type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "sign-up" ? "Create account" : mode === "reset" ? "Send reset link" : "Sign in"}</button>
+          </form>
         ) : (
-          <>
-            <label
-              htmlFor="otp"
-              style={{ display: "block", marginTop: 18 }}
-            >
-              6-digit verification code
-            </label>
-
-            <input
-              id="otp"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="Enter code"
-              value={otp}
-              onChange={(event) =>
-                setOtp(
-                  event.target.value.replace(/\D/g, "").slice(0, 6)
-                )
-              }
-              disabled={busy}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: 12,
-                marginTop: 8,
-                boxSizing: "border-box",
-              }}
-            />
-
-            <button
-              type="button"
-              onClick={verifyOtp}
-              disabled={busy || otp.length !== 6}
-              style={{
-                width: "100%",
-                padding: 14,
-                marginTop: 14,
-                cursor: busy ? "wait" : "pointer",
-              }}
-            >
-              {busy ? "Verifying…" : "Verify and sign in"}
-            </button>
-
-            <button
-              type="button"
-              onClick={useDifferentNumber}
-              disabled={busy}
-              style={{ marginTop: 12, padding: 8 }}
-            >
-              Use a different number
-            </button>
-          </>
+          <form className="stack" onSubmit={otpSent ? verifyPhoneOtp : sendPhoneOtp}>
+            <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={otpSent || busy} required /></label>
+            {otpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
+            <button type="submit" disabled={busy || (otpSent && otp.length !== 6)}>{busy ? "Please wait…" : otpSent ? "Verify and sign in" : "Send verification code"}</button>
+            {otpSent && <button type="button" disabled={busy} onClick={() => { setOtpSent(false); setOtp(""); setMessage(""); }}>Use a different number</button>}
+          </form>
         )}
-
-        {/* Firebase reCAPTCHA renders here */}
-        <div id="phone-recaptcha" style={{ marginTop: 16 }} />
-
-        {message && (
-          <p
-            role="status"
-            style={{ color: "green", marginTop: 16 }}
-          >
-            {message}
-          </p>
-        )}
-
-        {error && (
-          <p
-            role="alert"
-            style={{
-              color: "crimson",
-              marginTop: 16,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {error}
-          </p>
-        )}
-
-        <p className="muted" style={{ marginTop: 20, fontSize: 13 }}>
-          By continuing with mobile, you agree to receive an SMS
-          verification code. Your carrier may charge messaging fees.
-        </p>
+        {message && <p role="status" className="notice">{message}</p>}
+        {error && <p role="alert" className="notice">{error}</p>}
+        <div style={{ marginTop: 22, display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {mode === "sign-in" && <><button type="button" onClick={() => setMode("sign-up")} disabled={busy}>Create account</button><button type="button" onClick={() => setMode("phone")} disabled={busy}>Use mobile OTP</button><button type="button" onClick={() => setMode("reset")} disabled={busy}>Forgot password?</button></>}
+          {(mode === "sign-up" || mode === "phone" || mode === "reset") && <button type="button" onClick={() => { setMode("sign-in"); setOtpSent(false); setOtp(""); setError(""); setMessage(""); }} disabled={busy}>Back to sign in</button>}
+        </div>
       </section>
     </main>
   );
