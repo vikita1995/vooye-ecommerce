@@ -118,7 +118,11 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, phone: rows[0] });
   } catch (cause) {
-    console.error("Customer phone API error:", cause);
+    const reason = cause instanceof Error ? cause.message : "";
+    if (reason === "AUTH_REQUIRED") return fail("Please sign in first.", 401);
+    if (reason === "AUTH_INVALID") return fail("Your session is invalid or expired. Please sign in again.", 401);
+    if (reason === "AUTH_SERVICE_UNAVAILABLE") return fail("Authentication service is temporarily unavailable.", 503);
+    console.error("Customer phone API error:", reason || "Unknown error");
     return fail("Unable to update your phone number.", 500);
   }
 }
