@@ -11,7 +11,7 @@ function fail(message: string, status: number) {
 
 export async function GET(request: NextRequest) {
   try {
-    let decoded;
+    let decoded: Awaited<ReturnType<typeof authenticateSupabaseRequest>>;
     try {
       decoded = await authenticateSupabaseRequest(request);
     } catch (cause) {
