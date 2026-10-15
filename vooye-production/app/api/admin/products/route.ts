@@ -6,6 +6,8 @@ import { apiError, supabaseRest } from "@/lib/seller-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type ProductStatus = "draft" | "active" | "hidden";
+
 type Product = {
   id: string;
   seller_uid: string;
@@ -16,7 +18,7 @@ type Product = {
   dimensions: string | null;
   price_paise: number;
   stock: number;
-  status: string;
+  status: ProductStatus;
   created_at: string;
   updated_at: string;
 };
@@ -32,7 +34,10 @@ function handleAdminError(error: unknown) {
     message === "Authentication invalid or expired" ||
     message === "Verified account email required"
   ) {
-    return apiError("Authentication required. Please sign in again.", 401);
+    return apiError(
+      "Authentication required. Please sign in again.",
+      401
+    );
   }
 
   if (message === "Forbidden") {
@@ -44,36 +49,32 @@ function handleAdminError(error: unknown) {
   }
 
   console.error(
-    "Admin product moderation API error:",
+    "Admin product API error:",
     message || "Unknown error"
   );
 
   return apiError("The request could not be completed.", 500);
 }
 
-/**
- * GET /api/admin/products
- * GET /api/admin/products?status=draft
- * GET /api/admin/products?status=all
- *
- * Lists products for administrator moderation.
- * Defaults to draft products.
- */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit
+) {
+  return fetch(url, {
+    ...init,
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
 
-    const requestedStatus =
+    const status =
       request.nextUrl.searchParams.get("status") ?? "draft";
 
-    const allowedStatuses = new Set([
-      "draft",
-      "active",
-      "hidden",
-      "all",
-    ]);
-
-    if (!allowedStatuses.has(requestedStatus)) {
+    if (!["draft", "active", "hidden", "all"].includes(status)) {
       return apiError(
         "Status must be draft, active, hidden, or all.",
         400
@@ -81,19 +82,14 @@ export async function GET(request: NextRequest) {
     }
 
     const db = supabaseRest("products");
-
     const statusFilter =
-      requestedStatus === "all"
+      status === "all"
         ? ""
-        : `&status=eq.${encodeURIComponent(requestedStatus)}`;
+        : `&status=eq.${encodeURIComponent(status)}`;
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${db.url}?select=${PRODUCT_FIELDS}${statusFilter}&order=created_at.desc&limit=100`,
-      {
-        headers: db.headers,
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }
+      { headers: db.headers }
     );
 
     if (!response.ok) {
@@ -101,7 +97,6 @@ export async function GET(request: NextRequest) {
         "Admin product lookup failed:",
         response.status
       );
-
       return apiError("Unable to load products.", 502);
     }
 
@@ -116,23 +111,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * PATCH /api/admin/products
- *
- * Body:
- * {
- *   "product_id": "product-id",
- *   "status": "active"
- * }
- *
- * Supported moderation actions:
- * - active: approve or make a product visible
- * - hidden: hide a product from customers
- *
- * Only the status field can be changed through this endpoint.
- */
 export async function PATCH(request: NextRequest) {
   try {
+    // Authorization must happen before database access.
     await requireAdmin(request);
 
     let body: unknown;
@@ -154,7 +135,11 @@ export async function PATCH(request: NextRequest) {
     const input = body as Record<string, unknown>;
     const allowedFields = new Set(["product_id", "status"]);
 
-    if (Object.keys(input).some((field) => !allowedFields.has(field))) {
+    if (
+      Object.keys(input).some(
+        (field) => !allowedFields.has(field)
+      )
+    ) {
       return apiError(
         "Moderation request contains unsupported fields.",
         400
@@ -166,13 +151,16 @@ export async function PATCH(request: NextRequest) {
         ? input.product_id.trim()
         : "";
 
-    const status = input.status;
+    const nextStatus = input.status;
 
     if (!productId || productId.length > 128) {
       return apiError("A valid product ID is required.", 400);
     }
 
-    if (status !== "active" && status !== "hidden") {
+    if (
+      nextStatus !== "active" &&
+      nextStatus !== "hidden"
+    ) {
       return apiError(
         "Status must be active or hidden.",
         400
@@ -181,17 +169,60 @@ export async function PATCH(request: NextRequest) {
 
     const db = supabaseRest("products");
 
-    const response = await fetch(
-      `${db.url}?id=eq.${encodeURIComponent(productId)}&select=${PRODUCT_FIELDS}`,
+    // Read the current status before validating the transition.
+    const lookup = await fetchWithTimeout(
+      `${db.url}?id=eq.${encodeURIComponent(productId)}&select=id,status&limit=1`,
+      { headers: db.headers }
+    );
+
+    if (!lookup.ok) {
+      console.error(
+        "Admin product status lookup failed:",
+        lookup.status
+      );
+      return apiError("Unable to check product status.", 502);
+    }
+
+    const currentRows = (await lookup.json()) as {
+      id: string;
+      status: ProductStatus;
+    }[];
+
+    const current = currentRows[0];
+
+    if (!current) {
+      return apiError("Product not found.", 404);
+    }
+
+    const allowedTransitions: Record<
+      ProductStatus,
+      ProductStatus[]
+    > = {
+      draft: ["active"],
+      active: ["hidden"],
+      hidden: ["active"],
+    };
+
+    if (!allowedTransitions[current.status]?.includes(
+      nextStatus
+    )) {
+      return apiError(
+        `Cannot change product status from ${current.status} to ${nextStatus}.`,
+        409
+      );
+    }
+
+    // Compare-and-set: update only if the status still matches
+    // what we read. This protects against concurrent status changes.
+    const response = await fetchWithTimeout(
+      `${db.url}?id=eq.${encodeURIComponent(productId)}&status=eq.${encodeURIComponent(current.status)}&select=${PRODUCT_FIELDS}`,
       {
         method: "PATCH",
         headers: {
           ...db.headers,
           Prefer: "return=representation",
         },
-        body: JSON.stringify({ status }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify({ status: nextStatus }),
       }
     );
 
@@ -200,7 +231,6 @@ export async function PATCH(request: NextRequest) {
         "Admin product moderation update failed:",
         response.status
       );
-
       return apiError("Unable to update product status.", 502);
     }
 
@@ -208,7 +238,10 @@ export async function PATCH(request: NextRequest) {
     const product = products[0];
 
     if (!product) {
-      return apiError("Product not found.", 404);
+      return apiError(
+        "Product status changed concurrently. Reload and retry.",
+        409
+      );
     }
 
     return NextResponse.json(
