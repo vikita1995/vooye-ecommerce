@@ -54,7 +54,7 @@ export default async function Home() {
   return (
     <main className="wrap">
       <header className="top">
-        <Link className="brand" href="/">VOOYE</Link>
+        <Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link>
         <nav className="nav">
           <Link href="/#shop">Shop</Link>
           <Link href="/seller">Sell on Vooye</Link>
@@ -192,7 +192,7 @@ export default async function Home() {
       </section>
 
       <footer className="footer">
-        <div className="footer-brand"><Link className="brand" href="/">VOOYE</Link><p>Reflections, refined.</p></div>
+        <div className="footer-brand"><Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 120, height: 72, objectFit: "contain" }} /></Link><p>Reflections, refined.</p></div>
         <div className="footer-links"><Link href="/#shop">Shop the collection</Link><Link href="/seller">Seller portal</Link><Link href="/account">Your account</Link><Link href="/cart">Cart</Link></div>
         <div className="footer-bottom"><span>© {new Date().getFullYear()} VOOYE. Thoughtfully considered.</span><span>Mirrors · Home décor · Everyday beauty</span></div>
       </footer>
