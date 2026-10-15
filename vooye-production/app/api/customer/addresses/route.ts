@@ -48,6 +48,7 @@ function handleError(cause: unknown) {
   const known: Record<string, { message: string; status: number }> = {
     AUTH_REQUIRED: { message: "Please sign in first.", status: 401 },
     AUTH_INVALID: { message: "Your session has expired. Please sign in again.", status: 401 },
+    AUTH_SERVICE_UNAVAILABLE: { message: "Authentication service is temporarily unavailable.", status: 503 },
     CONFIG_MISSING: { message: "Address service is not configured.", status: 500 },
     CUSTOMER_LOOKUP_FAILED: { message: "Unable to verify your customer account.", status: 502 },
     CUSTOMER_NOT_FOUND: { message: "Customer profile not found. Open your account page first.", status: 404 },
