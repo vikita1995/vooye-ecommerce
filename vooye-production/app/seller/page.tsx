@@ -3,8 +3,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { getIdToken, onAuthStateChanged, type User } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 type SellerApplication = {
   firebase_uid: string;
@@ -74,19 +74,20 @@ export default function SellerPortal() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    try {
-      unsubscribe = onAuthStateChanged(getFirebaseAuth(), (currentUser) => {
-        setUser(currentUser);
-        setAuthReady(true);
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Firebase sign-in is unavailable.");
+    let active = true;
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) setError("Unable to verify your sign-in session.");
+      setUser(data.session?.user ?? null);
       setAuthReady(true);
-    }
-
-    return () => unsubscribe?.();
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   const requestApplication = useCallback(
@@ -95,7 +96,9 @@ export default function SellerPortal() {
         throw new Error("Please sign in before continuing.");
       }
 
-      const token = await getIdToken(user);
+      const { data: { session }, error: sessionError } = await createClient().auth.getSession();
+    if (sessionError || !session?.access_token) throw new Error("Please sign in again.");
+    const token = session.access_token;
       const response = await fetch("/api/seller/application", {
         method,
         headers: {
@@ -225,7 +228,7 @@ export default function SellerPortal() {
             <article className="panel">
               <h2>Seller application</h2>
               <p className="muted">
-                Signed in as {user.email || user.phoneNumber || "your account"}.
+                Signed in as {user.email || user.phone || "your account"}.
               </p>
 
               {loading ? (
