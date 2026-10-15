@@ -8,3 +8,7 @@ coverage
 !.env.example
 *.log
 .DS_Store
+
+# Generated Prisma client and TypeScript build cache
+generated/
+*.tsbuildinfo

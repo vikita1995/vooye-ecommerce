@@ -1,3 +1,4 @@
+
 # Stage 1: Install dependencies
 FROM node:22-alpine AS deps
 
@@ -5,10 +6,13 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 
-# Reconcile the lockfile with the pinned manifest before the clean install.
-RUN npm install --package-lock-only --ignore-scripts --no-audit --no-fund \
-    && npm ci --no-audit --no-fund
+# Prisma 7 reads DIRECT_URL from prisma.config.ts.
+# This placeholder is for client generation only; it is not a real DB connection.
+ENV DIRECT_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+
+RUN npm ci --no-audit --no-fund
 
 
 # Stage 2: Build Next.js application
@@ -28,7 +32,6 @@ ARG NEXT_PUBLIC_FIREBASE_APP_ID
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
-# Make configuration available during the Next.js build
 ENV NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
 ENV NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
 ENV NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
@@ -36,6 +39,9 @@ ENV NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
 
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+
+# Keep Prisma config evaluable during build without exposing real credentials.
+ENV DIRECT_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
