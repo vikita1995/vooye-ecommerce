@@ -49,10 +49,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
   // Do not expose draft, hidden, out-of-stock, rejected, or suspended listings.
   if (!product) notFound();
 
+  const isVooyeMirror = slug.startsWith("vooye-gold-arched-floor-mirror");
+  const mirrorGallery = [
+    "01-front-angle.jpeg",
+    "02-side-angle.jpeg",
+    "03-front-view.jpeg",
+    "04-angled-view.jpeg",
+    "05-room-view.jpeg",
+    "06-room-view.jpeg",
+  ].map((file) => `https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/${file}`);
+  const primaryImage = product.imageUrl || (isVooyeMirror ? mirrorGallery[0] : null);
+
   return (
     <main className="wrap">
       <header className="top">
-        <Link className="brand" href="/">VOOYE</Link>
+        <Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link>
         <nav className="nav">
           <Link href="/#shop">Shop</Link>
           <Link href="/cart">Cart</Link>
@@ -61,10 +72,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
       <section className="hero">
         <div className="hero-art">
-          {product.imageUrl ? (
+          {primaryImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={product.imageUrl}
+              src={primaryImage}
               alt={product.name}
               style={{
                 width: "100%",
@@ -84,6 +95,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <h1>{product.name}</h1>
           <div className="price">{formatPrice(product.pricePaise)}</div>
           <p>{product.description}</p>
+
+          {isVooyeMirror && (
+            <div className="panel" style={{ marginTop: 20 }}>
+              <h2>Mirror specifications</h2>
+              <p><strong>Size:</strong> 5 ft × 1.5 ft (152.4 × 45.72 cm)</p>
+              <p><strong>Mirror weight:</strong> 6 kg; stand weight may be additional.</p>
+              <p><strong>Available options:</strong> Hanging mirror — ₹2,599; mirror with stand — ₹2,999.</p>
+              <p className="muted">Choose the matching product option before checkout. Price and stock must match the selected listing.</p>
+            </div>
+          )}
 
           {product.dimensions && (
             <p className="muted">
@@ -114,6 +135,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </p>
         </div>
       </section>
+      {isVooyeMirror && (
+        <section className="section" aria-label="Product gallery">
+          <div className="eyebrow">A closer look</div>
+          <h2>Explore every angle</h2>
+          <div className="grid" style={{ marginTop: 20 }}>
+            {mirrorGallery.map((image, index) => (
+              <figure className="product" key={image}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image} alt={`Vooye gold arched mirror view ${index + 1}`} loading="lazy" style={{ width: "100%", height: 320, objectFit: "contain", background: "#eee6db" }} />
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

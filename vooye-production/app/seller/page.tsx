@@ -199,7 +199,7 @@ export default function SellerPortal() {
   return (
     <main className="wrap">
       <header className="top">
-        <Link className="brand" href="/">VOOYE</Link>
+        <Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link>
         <nav className="nav">
           <Link href="/">Customer shop</Link>
           <Link href="/account/orders">My orders</Link>
