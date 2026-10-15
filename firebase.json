@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "site": "vooye-510916",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "vooye-frontend",
+          "region": "asia-south1"
+        }
+      }
+    ]
+  }
+}
