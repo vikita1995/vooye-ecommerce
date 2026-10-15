@@ -10,7 +10,23 @@ function error(message: string, status: number) {
 }
 
 async function getContext(request: NextRequest) {
+
   const decoded = await authenticateSupabaseRequest(request);
+=======
+  const authorization = request.headers.get("authorization") ?? "";
+  const token = authorization.startsWith("Bearer ")
+    ? authorization.slice(7).trim()
+    : "";
+
+  if (!token) throw new Error("AUTH_REQUIRED");
+
+  let decoded;
+  try {
+    decoded = await firebaseAuth().verifyIdToken(token, true);
+  } catch {
+    throw new Error("AUTH_INVALID");
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
