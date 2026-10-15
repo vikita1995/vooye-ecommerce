@@ -161,7 +161,7 @@ export default function AdminPortal() {
     let active = true;
     const supabase = createClient();
     void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error: sessionError } = result; {
+      const { data, error: sessionError } = result;
       if (!active) return;
       if (sessionError) setError("Unable to verify your sign-in session.");
       if (data.session) void loadData();
