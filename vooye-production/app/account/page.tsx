@@ -61,7 +61,7 @@ export default function AccountPage() {
     let active = true;
 
     void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error: sessionError } = result; {
+      const { data, error: sessionError } = result;
       if (!active) return;
       if (sessionError) setError(sessionError.message);
       setUser(data.session?.user ?? null);
