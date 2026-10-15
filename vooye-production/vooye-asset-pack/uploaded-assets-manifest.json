@@ -1,0 +1,44 @@
+{
+  "product": {
+    "slug": "arched-gold-floor-mirror",
+    "name": "Gold Arched Full-Length Floor Mirror",
+    "category": "Full-Length Mirrors",
+    "description": "Full-length arched mirror with a slim gold-tone frame and freestanding black support. Product photography shows multiple angles in a bright interior setting.",
+    "priceRupees": null,
+    "stock": null,
+    "note": "Set the selling price and stock count before creating/publishing the product listing."
+  },
+  "logoUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png",
+  "images": [
+    {
+      "path": "products/arched-gold-floor-mirror/01-front-angle.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/01-front-angle.jpeg",
+      "bytes": 358300
+    },
+    {
+      "path": "products/arched-gold-floor-mirror/02-side-angle.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/02-side-angle.jpeg",
+      "bytes": 477770
+    },
+    {
+      "path": "products/arched-gold-floor-mirror/03-front-view.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/03-front-view.jpeg",
+      "bytes": 361321
+    },
+    {
+      "path": "products/arched-gold-floor-mirror/04-angled-view.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/04-angled-view.jpeg",
+      "bytes": 389142
+    },
+    {
+      "path": "products/arched-gold-floor-mirror/05-room-view.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/05-room-view.jpeg",
+      "bytes": 374650
+    },
+    {
+      "path": "products/arched-gold-floor-mirror/06-room-view.jpeg",
+      "publicUrl": "https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/06-room-view.jpeg",
+      "bytes": 406225
+    }
+  ]
+}
