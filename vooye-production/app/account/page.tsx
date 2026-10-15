@@ -1,18 +1,9 @@
-
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  onAuthStateChanged,
-  signOut,
-  RecaptchaVerifier,
-  PhoneAuthProvider,
-  linkWithCredential,
-  updatePhoneNumber,
-  type User,
-} from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 type Customer = {
   id: string;
@@ -28,580 +19,189 @@ type Customer = {
   status: string;
 };
 
-function phoneErrorMessage(cause: unknown) {
-  const code =
-    cause && typeof cause === "object" && "code" in cause
-      ? String((cause as { code?: unknown }).code)
-      : "";
-
-  const messages: Record<string, string> = {
-    "auth/code-expired":
-      "This OTP has expired. Select Resend OTP and enter the newest code.",
-    "auth/invalid-verification-code":
-      "That OTP is incorrect. Check the newest SMS and try again.",
-    "auth/credential-already-in-use":
-      "This phone number is already linked to another Firebase account. Sign in to that account or use a different number.",
-    "auth/provider-already-linked":
-      "A phone number is already linked to this account. Try updating the number again.",
-    "auth/requires-recent-login":
-      "For your security, sign out and sign in again before changing this number.",
-    "auth/too-many-requests":
-      "Too many attempts. Please wait before requesting another OTP.",
-    "auth/invalid-phone-number":
-      "Enter a valid phone number with country code, such as +919876543210.",
-    "auth/captcha-check-failed":
-      "reCAPTCHA verification failed. Complete the new reCAPTCHA and try again.",
-    "auth/missing-phone-number":
-      "Enter your mobile number before requesting an OTP.",
-    "auth/network-request-failed":
-      "Network error. Check your connection and try again.",
-  };
-
-  if (messages[code]) return messages[code];
-
-  return cause instanceof Error
-    ? cause.message
-    : "Something went wrong. Please try again.";
-}
-
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
-
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
-
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [message, setMessage] = useState("");
 
-  const [phoneInput, setPhoneInput] = useState("");
-  const [otp, setOtp] = useState("");
-  const [verificationId, setVerificationId] = useState("");
-  const [phoneBusy, setPhoneBusy] = useState(false);
-  const [phoneMessage, setPhoneMessage] = useState("");
-  const [phoneError, setPhoneError] = useState("");
-
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
-
-  const loadProfile = useCallback(async (currentUser: User) => {
+  const loadProfile = useCallback(async (accessToken: string) => {
     setLoading(true);
     setError("");
-
     try {
-      const token = await currentUser.getIdToken();
-
       const response = await fetch("/api/customer/profile", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
         cache: "no-store",
       });
-
-      const result = (await response.json()) as {
-        customer?: Customer;
-        error?: string;
-      };
-
-      if (!response.ok || !result.customer) {
-        throw new Error(result.error || "Unable to load your profile.");
-      }
-
-      const profile = result.customer;
-      setCustomer(profile);
-      setFullName(profile.full_name ?? "");
-      setDateOfBirth(profile.date_of_birth ?? "");
-      setGender(profile.gender ?? "");
+      const data = await response.json();
+      if (!response.ok || !data.customer) throw new Error(data.error || "Unable to load your profile.");
+      setCustomer(data.customer);
+      setFullName(data.customer.full_name ?? "");
+      setDateOfBirth(data.customer.date_of_birth ?? "");
+      setGender(data.customer.gender ?? "");
     } catch (cause) {
       setCustomer(null);
-      setError(
-        cause instanceof Error ? cause.message : "Unable to load your profile."
-      );
+      setError(cause instanceof Error ? cause.message : "Unable to load your profile.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
+    const supabase = createClient();
+    let active = true;
 
-    try {
-      unsubscribe = onAuthStateChanged(getFirebaseAuth(), (currentUser) => {
-        setUser(currentUser);
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) setError(sessionError.message);
+      setUser(data.session?.user ?? null);
+      if (data.session?.access_token) void loadProfile(data.session.access_token);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        void loadProfile(session.access_token);
+      } else {
         setCustomer(null);
-        setError("");
-        setSuccess("");
-        setPhoneError("");
-        setPhoneMessage("");
-        setVerificationId("");
-        setOtp("");
+        setLoading(false);
+      }
+    });
 
-        if (currentUser) {
-          void loadProfile(currentUser);
-        } else {
-          setLoading(false);
-        }
-      });
-    } catch {
-      setError("Unable to initialize sign-in. Please refresh the page.");
-      setLoading(false);
-    }
-
-    return () => {
-      unsubscribe?.();
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-    };
+    return () => { active = false; subscription.unsubscribe(); };
   }, [loadProfile]);
 
-  async function handleSave(event: React.FormEvent<HTMLFormElement>) {
+  async function getAccessToken() {
+    const { data, error } = await createClient().auth.getSession();
+    if (error || !data.session?.access_token) throw new Error("Please sign in again.");
+    return data.session.access_token;
+  }
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!user || !customer) return;
-
-    setSaving(true);
-    setError("");
-    setSuccess("");
-
+    setSaving(true); setError(""); setMessage("");
     try {
-      const token = await user.getIdToken();
-
+      const token = await getAccessToken();
       const response = await fetch("/api/customer/profile", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          full_name: fullName,
-          date_of_birth: dateOfBirth || null,
-          gender: gender || null,
-        }),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: fullName, date_of_birth: dateOfBirth || null, gender: gender || null }),
       });
-
-      const result = (await response.json()) as {
-        customer?: Customer;
-        error?: string;
-      };
-
-      if (!response.ok || !result.customer) {
-        throw new Error(result.error || "Unable to save your profile.");
-      }
-
-      setCustomer(result.customer);
-      setFullName(result.customer.full_name ?? "");
-      setDateOfBirth(result.customer.date_of_birth ?? "");
-      setGender(result.customer.gender ?? "");
-      setSuccess("Your personal information has been saved.");
+      const data = await response.json();
+      if (!response.ok || !data.customer) throw new Error(data.error || "Unable to save your profile.");
+      setCustomer(data.customer);
+      setMessage("Your personal information has been saved.");
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Unable to save your profile."
-      );
-    } finally {
-      setSaving(false);
-    }
+      setError(cause instanceof Error ? cause.message : "Unable to save your profile.");
+    } finally { setSaving(false); }
   }
 
-  async function handleSendOtp() {
-    if (!user) return;
-
-    const phone = phoneInput.trim();
-
-    if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
-      setPhoneError(
-        "Enter a valid international number, for example +919876543210."
-      );
-      return;
-    }
-
-    setPhoneBusy(true);
-    setPhoneError("");
-    setPhoneMessage("");
-
-    try {
-      const auth = getFirebaseAuth();
-      const container = recaptchaContainerRef.current;
-
-      if (!container) {
-        throw new Error("Verification could not initialize. Refresh the page.");
-      }
-
-      // Reset reCAPTCHA so each OTP request gets a fresh verification attempt.
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-
-      const verifier = new RecaptchaVerifier(auth, container, {
-        size: "normal",
-      });
-      recaptchaRef.current = verifier;
-
-      const provider = new PhoneAuthProvider(auth);
-      const newVerificationId = await provider.verifyPhoneNumber(
-        phone,
-        verifier
-      );
-
-      setVerificationId(newVerificationId);
-      setOtp("");
-      setPhoneMessage("A new OTP was sent. Enter the newest code from your SMS.");
-    } catch (cause) {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-      setPhoneError(phoneErrorMessage(cause));
-    } finally {
-      setPhoneBusy(false);
-    }
-  }
-
-  async function handleVerifyPhone(event: React.FormEvent<HTMLFormElement>) {
+  async function sendPhoneOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!user || !verificationId) return;
-
-    const code = otp.trim();
-
-    if (!/^\d{6}$/.test(code)) {
-      setPhoneError("Enter the 6-digit verification code.");
-      return;
-    }
-
-    setPhoneBusy(true);
-    setPhoneError("");
-    setPhoneMessage("");
-
+    setBusy(true); setError(""); setMessage("");
     try {
-      const credential = PhoneAuthProvider.credential(verificationId, code);
+      if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) throw new Error("Enter a phone number with country code, e.g. +919876543210.");
+      const { error } = await createClient().auth.updateUser({ phone: phone.trim() });
+      if (error) throw error;
+      setPhoneOtpSent(true);
+      setMessage("Verification code sent to your mobile number.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to send verification code.");
+    } finally { setBusy(false); }
+  }
 
-      const hasPhoneProvider = user.providerData.some(
-        (provider) => provider.providerId === "phone"
-      );
-
-      let updatedUser: User;
-
-      if (hasPhoneProvider) {
-        await updatePhoneNumber(user, credential);
-        updatedUser = user;
-      } else {
-        const linked = await linkWithCredential(user, credential);
-        updatedUser = linked.user;
-      }
-
-      await updatedUser.reload();
-
-      const verifiedPhone = updatedUser.phoneNumber;
-      if (!verifiedPhone) {
-        throw new Error(
-          "Firebase did not return the verified number. Please refresh and try again."
-        );
-      }
-
-      const token = await updatedUser.getIdToken(true);
-
+  async function verifyPhoneOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError(""); setMessage("");
+    try {
+      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit verification code.");
+      const { data, error } = await createClient().auth.verifyOtp({
+        phone: phone.trim(), token: otp.trim(), type: "phone_change",
+      });
+      if (error) throw error;
+      const token = data.session?.access_token ?? await getAccessToken();
       const response = await fetch("/api/customer/phone", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ phone_number: verifiedPhone }),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: data.user?.phone ?? phone.trim() }),
       });
-
-      const result = (await response.json()) as {
-        success?: boolean;
-        error?: string;
-      };
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || "Unable to save the verified number.");
-      }
-
-      setPhoneInput("");
-      setOtp("");
-      setVerificationId("");
-      setPhoneMessage("Your mobile number has been verified and linked.");
-
-      await loadProfile(updatedUser);
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || "Verified number could not be saved to the profile.");
+      setPhone(""); setOtp(""); setPhoneOtpSent(false);
+      setMessage("Your mobile number has been verified.");
+      await loadProfile(token);
     } catch (cause) {
-      setPhoneError(phoneErrorMessage(cause));
-    } finally {
-      setPhoneBusy(false);
-    }
+      setError(cause instanceof Error ? cause.message : "Unable to verify the mobile number.");
+    } finally { setBusy(false); }
   }
 
-  function handleChangeNumber() {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-    setVerificationId("");
-    setOtp("");
-    setPhoneError("");
-    setPhoneMessage("");
+  async function signOut() {
+    setBusy(true); setError("");
+    const { error } = await createClient().auth.signOut();
+    if (error) { setError(error.message); setBusy(false); return; }
+    window.location.assign("/");
   }
 
-  async function handleSignOut() {
-    setSigningOut(true);
-    setError("");
-
-    try {
-      await signOut(getFirebaseAuth());
-      window.location.assign("/");
-    } catch {
-      setError("Unable to sign out. Please try again.");
-      setSigningOut(false);
-    }
-  }
+  if (loading && !user) return <main className="wrap section"><p>Checking your sign-in…</p></main>;
 
   return (
     <main className="wrap">
       <header className="top">
         <Link className="brand" href="/">VOOYE</Link>
-        <nav className="nav">
-          <Link href="/">Shop</Link>
-          <Link href="/account/orders">My orders</Link>
-          <Link href="/seller">Seller portal</Link>
-        </nav>
+        <nav className="nav"><Link href="/">Shop</Link><Link href="/account/orders">My orders</Link><Link href="/account/addresses">My addresses</Link><Link href="/seller">Seller portal</Link></nav>
       </header>
-
       <section className="section">
         <div className="eyebrow">YOUR ACCOUNT</div>
         <h1>My account</h1>
-        <p className="muted">
-          Manage your personal information, contact details, addresses and orders.
-        </p>
+        <p className="muted">Manage your personal information, contact details, addresses and orders.</p>
 
-        {loading ? (
-          <p role="status">Loading your account…</p>
-        ) : !user ? (
-          <article className="panel">
-            <h2>Welcome to Vooye</h2>
-            <p className="muted">
-              Sign in with Google or your mobile number to access your account.
-            </p>
-            <Link href="/sign-in">Sign in to your account →</Link>
-          </article>
+        {!user ? (
+          <article className="panel"><h2>Welcome to Vooye</h2><p className="muted">Sign in to access your account.</p><Link href="/sign-in">Sign in to your account →</Link></article>
         ) : (
           <>
-            {error && (
-              <div className="notice" role="alert">
-                {error}
-                <button
-                  type="button"
-                  onClick={() => void loadProfile(user)}
-                  style={{ marginLeft: 12 }}
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {customer && (
+            {error && <p role="alert" className="notice">{error}</p>}
+            {message && <p role="status" className="notice">{message}</p>}
+            {loading ? <p role="status">Loading your profile…</p> : customer ? (
               <>
                 <article className="panel">
                   <h2>Personal information</h2>
-                  <p className="muted">
-                    Keep your details up to date for a smoother shopping experience.
-                  </p>
-
-                  <form className="stack" onSubmit={handleSave}>
-                    <label className="field">
-                      Full name
-                      <input
-                        name="full_name"
-                        autoComplete="name"
-                        minLength={2}
-                        maxLength={100}
-                        required
-                        value={fullName}
-                        onChange={(event) => setFullName(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="field">
-                      Date of birth
-                      <input
-                        name="date_of_birth"
-                        type="date"
-                        min="1900-01-01"
-                        max={new Date().toLocaleDateString("en-CA")}
-                        value={dateOfBirth}
-                        onChange={(event) => setDateOfBirth(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="field">
-                      Gender
-                      <select
-                        name="gender"
-                        value={gender}
-                        onChange={(event) => setGender(event.target.value)}
-                      >
-                        <option value="">Prefer not to say</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-
-                    <div>
-                      <button type="submit" disabled={saving}>
-                        {saving ? "Saving…" : "Save changes"}
-                      </button>
-                    </div>
-
-                    {success && (
-                      <p role="status" style={{ color: "green" }}>{success}</p>
-                    )}
+                  <form className="stack" onSubmit={saveProfile}>
+                    <label className="field">Full name<input name="full_name" autoComplete="name" minLength={2} maxLength={100} required value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+                    <label className="field">Date of birth<input name="date_of_birth" type="date" min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} /></label>
+                    <label className="field">Gender<select name="gender" value={gender} onChange={(e) => setGender(e.target.value)}><option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></label>
+                    <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
                   </form>
                 </article>
-
                 <article className="panel">
                   <h2>Email and mobile number</h2>
-
-                  <div className="stack">
-                    <div>
-                      <strong>Email address</strong>
-                      <p>{customer.email || "Not linked"}</p>
-                      <span className="badge">
-                        {customer.email_verified_at ? "Verified" : "Not verified"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <strong>Mobile number</strong>
-                      <p>{customer.phone_e164 || "Not linked"}</p>
-                      <span className="badge">
-                        {customer.phone_verified_at ? "Verified" : "Not verified"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 24 }}>
-                    <h3>
-                      {customer.phone_e164 ? "Update mobile number" : "Add mobile number"}
-                    </h3>
-                    <p className="muted">
-                      Verify your number by SMS to link it to your existing account.
-                    </p>
-
-                    <form
-                      className="stack"
-                      onSubmit={
-                        verificationId
-                          ? handleVerifyPhone
-                          : (event) => {
-                              event.preventDefault();
-                              void handleSendOtp();
-                            }
-                      }
-                    >
-                      <label className="field">
-                        Mobile number with country code
-                        <input
-                          type="tel"
-                          name="phone_number"
-                          autoComplete="tel"
-                          placeholder="+919876543210"
-                          value={phoneInput}
-                          onChange={(event) => setPhoneInput(event.target.value)}
-                          disabled={phoneBusy || Boolean(verificationId)}
-                          required
-                        />
-                      </label>
-
-                      <div ref={recaptchaContainerRef} />
-
-                      {!verificationId ? (
-                        <div>
-                          <button
-                            type="submit"
-                            disabled={phoneBusy || !phoneInput.trim()}
-                          >
-                            {phoneBusy ? "Sending OTP…" : "Send OTP"}
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <label className="field">
-                            6-digit verification code
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              autoComplete="one-time-code"
-                              pattern="[0-9]{6}"
-                              maxLength={6}
-                              value={otp}
-                              onChange={(event) =>
-                                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
-                              }
-                              required
-                            />
-                          </label>
-
-                          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                            <button
-                              type="submit"
-                              disabled={phoneBusy || otp.length !== 6}
-                            >
-                              {phoneBusy ? "Verifying…" : "Verify and save number"}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={phoneBusy}
-                              onClick={handleSendOtp}
-                            >
-                              {phoneBusy ? "Sending…" : "Resend OTP"}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={phoneBusy}
-                              onClick={handleChangeNumber}
-                            >
-                              Change number
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {phoneMessage && (
-                        <p role="status" style={{ color: "green" }}>
-                          {phoneMessage}
-                        </p>
-                      )}
-
-                      {phoneError && (
-                        <p role="alert" className="notice">{phoneError}</p>
-                      )}
-                    </form>
-                  </div>
+                  <p><strong>Email:</strong> {user.email || "Not linked"} {user.email_confirmed_at ? "(verified)" : ""}</p>
+                  <p><strong>Mobile:</strong> {user.phone || customer.phone_e164 || "Not linked"} {user.phone_confirmed_at ? "(verified)" : ""}</p>
+                  <h3>{user.phone ? "Update mobile number" : "Add mobile number"}</h3>
+                  <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
+                    <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
+                    {phoneOtpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
+                    <button type="submit" disabled={busy || (phoneOtpSent && otp.length !== 6)}>{busy ? "Please wait…" : phoneOtpSent ? "Verify and save number" : "Send verification code"}</button>
+                    {phoneOtpSent && <button type="button" disabled={busy} onClick={() => { setPhoneOtpSent(false); setOtp(""); setMessage(""); }}>Use a different number</button>}
+                  </form>
                 </article>
-
                 <div className="grid">
-                  <article className="panel">
-                    <h2>My addresses</h2>
-                    <p className="muted">Manage your shipping and billing addresses.</p>
-                    <Link href="/account/addresses">Manage my addresses →</Link>
-                  </article>
-
-                  <article className="panel">
-                    <h2>My orders</h2>
-                    <p className="muted">View your purchases and order status.</p>
-                    <Link href="/account/orders">View my orders →</Link>
-                  </article>
+                  <article className="panel"><h2>My addresses</h2><p className="muted">Manage your shipping and billing addresses.</p><Link href="/account/addresses">Manage my addresses →</Link></article>
+                  <article className="panel"><h2>My orders</h2><p className="muted">View your purchases and order status.</p><Link href="/account/orders">View my orders →</Link></article>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={signingOut}
-                  style={{ marginTop: 12 }}
-                >
-                  {signingOut ? "Signing out…" : "Sign out"}
-                </button>
+                <button type="button" onClick={() => void signOut()} disabled={busy} style={{ marginTop: 12 }}>{busy ? "Please wait…" : "Sign out"}</button>
               </>
-            )}
+            ) : <article className="panel"><p>Profile could not be loaded.</p><button type="button" onClick={() => void getAccessToken().then(loadProfile).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to reload profile."))}>Try again</button></article>}
           </>
         )}
       </section>
