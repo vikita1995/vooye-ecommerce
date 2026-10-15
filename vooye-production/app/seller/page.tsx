@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 type SellerApplication = {
@@ -76,13 +76,14 @@ export default function SellerPortal() {
   useEffect(() => {
     let active = true;
     const supabase = createClient();
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
+      const { data, error: sessionError } = result; {
       if (!active) return;
       if (sessionError) setError("Unable to verify your sign-in session.");
       setUser(data.session?.user ?? null);
       setAuthReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!active) return;
       setUser(session?.user ?? null);
       setAuthReady(true);
