@@ -64,32 +64,51 @@ export default async function Home() {
         </nav>
       </header>
 
+      <div className="announcement-bar">A more considered home starts with one beautiful detail <span aria-hidden="true">✦</span> Discover VOOYE</div>
+
       <section className="hero">
-        <div>
-          <div className="eyebrow">Mirrors that make a room</div>
+        <div className="hero-copy">
+          <div className="eyebrow">The art of reflection · Est. for your space</div>
           <h1>
-            A little more light.
+            Your space.
             <br />
-            A lot more you.
+            <span>Reflected beautifully.</span>
           </h1>
           <p>
-            Thoughtful mirrors and home décor, selected from independent
-            sellers to make your space feel like home.
+            Discover statement mirrors and thoughtful home accents that bring
+            light, character and a little everyday magic into your home.
           </p>
-          <a className="button" href="#shop">Explore the collection</a>
+          <div className="hero-actions">
+            <a className="button" href="#shop">Explore the collection <span aria-hidden="true">↗</span></a>
+            <span className="hero-note">Pieces that make a space feel yours.</span>
+          </div>
+          <div className="hero-perks">
+            <span><b>01</b> Thoughtfully selected</span>
+            <span><b>02</b> Made for your home</span>
+          </div>
         </div>
         <div className="hero-art" aria-label="Decorative mirror illustration">
-          <div className="mirror" />
+          <div className="hero-sun" />
+          <div className="hero-plant plant-left" aria-hidden="true">⌁</div>
+          <div className="mirror"><span className="mirror-shine" /></div>
+          <div className="hero-art-label"><span>THE REFLECTION EDIT</span><span>01 / VOOYE</span></div>
         </div>
       </section>
 
-      <section id="shop" className="section">
+      <section className="value-strip" aria-label="Vooye values">
+        <div><span className="value-icon">✳</span><span><strong>Design-led finds</strong><small>Thoughtful details for every room</small></span></div>
+        <div><span className="value-icon">⌂</span><span><strong>Independent sellers</strong><small>Discover something different</small></span></div>
+        <div><span className="value-icon">◌</span><span><strong>Made to feel like home</strong><small>Personal style, beautifully reflected</small></span></div>
+      </section>
+
+      <section id="shop" className="section collection-section">
         <div className="section-head">
           <div>
             <div className="eyebrow">The collection</div>
-            <h2>Made to be looked at.</h2>
+            <h2>Find your kind of beautiful.</h2>
+            <p className="section-intro">A collection of mirrors and accents that bring your rooms into focus.</p>
           </div>
-          <span className="muted">Mirrors · Home décor</span>
+          <a className="text-link" href="#seller">Explore the VOOYE edit <span aria-hidden="true">↗</span></a>
         </div>
 
         {productsUnavailable ? (
@@ -121,24 +140,37 @@ export default async function Home() {
                     <div className="mini-mirror" aria-hidden="true" />
                   )}
                 </div>
+                <div className="product-meta"><span>{product.category}</span><span className="product-dot" aria-hidden="true">✦</span></div>
                 <h3>{product.name}</h3>
-                <div className="muted">{product.category}</div>
-                <div className="price">{formatPrice(product.pricePaise)}</div>
-                <Link
-                  className="button"
-                  href={`/product/${encodeURIComponent(product.slug)}`}
-                >
-                  View details
-                </Link>
+                <div className="product-bottom">
+                  <div className="price">{formatPrice(product.pricePaise)}</div>
+                  <Link
+                    className="product-link"
+                    href={`/product/${encodeURIComponent(product.slug)}`}
+                    aria-label={`View ${product.name}`}
+                  >
+                    View piece <span aria-hidden="true">↗</span>
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
         )}
       </section>
 
-      <section className="section">
+      <section id="seller" className="section story-section">
+        <div className="story-art" aria-hidden="true"><div className="story-arch"><div /></div><span>FORM · FUNCTION · FEELING</span></div>
+        <div className="story-copy">
+          <div className="eyebrow">A home that feels like you</div>
+          <h2>It’s the little details that make a place yours.</h2>
+          <p className="muted">From the first glance in the morning to the final touch before guests arrive, find pieces that make everyday living feel a little more special.</p>
+          <a className="text-link" href="#shop">Find your reflection <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+
+      <section className="section audience-section">
         <div className="grid">
-          <div>
+          <div className="audience-card seller-card">
             <div className="eyebrow">For makers and stores</div>
             <h2>Have something beautiful to sell?</h2>
             <p className="muted">
@@ -147,7 +179,7 @@ export default async function Home() {
             </p>
             <Link className="button" href="/seller">Become a seller</Link>
           </div>
-          <div>
+          <div className="audience-card account-card">
             <div className="eyebrow">Your account</div>
             <h2>One place for your orders.</h2>
             <p className="muted">
@@ -160,8 +192,9 @@ export default async function Home() {
       </section>
 
       <footer className="footer">
-        © {new Date().getFullYear()} Vooye · Mirrors & home décor ·{" "}
-        <Link href="/seller">Seller portal</Link>
+        <div className="footer-brand"><Link className="brand" href="/">VOOYE</Link><p>Reflections, refined.</p></div>
+        <div className="footer-links"><Link href="/#shop">Shop the collection</Link><Link href="/seller">Seller portal</Link><Link href="/account">Your account</Link><Link href="/cart">Cart</Link></div>
+        <div className="footer-bottom"><span>© {new Date().getFullYear()} VOOYE. Thoughtfully considered.</span><span>Mirrors · Home décor · Everyday beauty</span></div>
       </footer>
     </main>
   );
