@@ -48,7 +48,9 @@ function handleAdminError(error: unknown) {
 }
 
 /**
- * GET /api/admin/sellers?status=pending
+ * GET /api/admin/sellers
+ * GET /api/admin/sellers?status=all
+ *
  * Lists seller applications. Defaults to pending applications.
  */
 export async function GET(request: NextRequest) {
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = supabaseRest("seller_profiles");
+
     const statusFilter =
       requestedStatus === "all"
         ? ""
@@ -110,7 +113,12 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH /api/admin/sellers
- * Body: { "firebase_uid": "...", "status": "approved" | "rejected" }
+ *
+ * Body:
+ * {
+ *   "firebase_uid": "seller-firebase-uid",
+ *   "status": "approved"
+ * }
  *
  * Only pending applications can be reviewed.
  */
