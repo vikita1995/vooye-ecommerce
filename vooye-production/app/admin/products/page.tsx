@@ -192,11 +192,14 @@ export default function AdminProductsPage() {
           body: JSON.stringify(editingId ? { product_id: editingId, ...payload } : payload),
         },
       );
-      setMessage(editingId ? "Product changes saved." : "Product saved as a draft. It is not visible in the public shop until you publish it.");
+      const wasEditing = Boolean(editingId);
+      setImages(allImages);
       setFiles([]);
       setEditingId(result.product?.id ?? editingId);
       await loadProducts();
-      if (!editingId && result.product) editProduct({ ...result.product, images: allImages } as Product);
+      setMessage(wasEditing
+        ? "Product changes saved."
+        : "Product saved as a draft. It is not visible in the public shop until you publish it.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save the product.");
     } finally {
