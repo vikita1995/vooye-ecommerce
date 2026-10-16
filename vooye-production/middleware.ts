@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { FIREBASE_SESSION_COOKIE, verifyFirebaseSessionCookie } from "@/lib/firebase/admin";
-import { isAdminUid } from "@/lib/auth";
+import { isAdminUid } from "@/lib/admin-allowlist";
 
 const PAGE_PREFIXES = ["/account", "/seller", "/admin"];
 const API_PREFIXES = ["/api/customer", "/api/seller", "/api/admin"];
@@ -31,7 +31,6 @@ export async function middleware(request: NextRequest) {
 
   // API route handlers must enforce authorization independently.
   if (isProtectedApi) return NextResponse.next();
-
   if (pathname === "/admin/login") return noStore(NextResponse.next());
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
