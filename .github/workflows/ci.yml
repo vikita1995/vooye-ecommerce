@@ -2,48 +2,68 @@ name: Vooye CI
 
 on:
   pull_request:
-    paths:
-      - "vooye-production/**"
-      - ".github/workflows/ci.yml"
-  push:
     branches: [main]
     paths:
       - "vooye-production/**"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/**"
+      - "firebase.json"
+      - ".firebaserc"
+  push:
+    branches: [main, upgrade/prisma-7]
+    paths:
+      - "vooye-production/**"
+      - ".github/workflows/**"
+      - "firebase.json"
+      - ".firebaserc"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Cancel stale checks for the same branch/PR; the newest commit is what matters.
+concurrency:
+  group: vooye-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: vooye-production
 
-    # Prisma 7 loads prisma.config.ts during npm install's postinstall.
-    # Client generation does not connect to the database, so use CI-only
-    # placeholder URLs rather than production database credentials.
+    # Build/test only with non-production configuration. Never use live credentials in CI.
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
       DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: example.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: vooye-ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+      FIREBASE_ADMIN_PROJECT_ID: vooye-ci
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      RAZORPAY_KEY_ID: rzp_test_placeholder
+      RAZORPAY_KEY_SECRET: placeholder
+      RAZORPAY_WEBHOOK_SECRET: placeholder
+      NEXT_PUBLIC_RAZORPAY_KEY_ID: rzp_test_placeholder
+      NEXT_PUBLIC_STORE_URL: https://vooye.in
+      SHIPPING_FLAT_FEE_PAISE: "9900"
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: vooye-production/package-lock.json
 
-      - name: Install dependencies
-        # Keep CI aligned with the package manifest when the lockfile is stale.
-        # A regenerated package-lock.json should be committed separately so CI can return to npm ci.
-        run: npm install --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Validate Prisma schema
         run: npx prisma validate
@@ -59,3 +79,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Production build
+        run: npm run build

@@ -1,26 +1,27 @@
-name: Validate Vooye
+name: Manual Release Validation
 
+# The PR/push CI workflow already runs the complete check suite.
+# Keep this workflow for an explicit, on-demand release re-check only.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: vooye-manual-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: vooye-production
-
-    # Prisma 7 loads prisma.config.ts during npm install's postinstall.
-    # Use non-production placeholders for install, generation, and CI build.
     env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/test?schema=public
-      DIRECT_URL: postgresql://test:test@localhost:5432/test?schema=public
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
       NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: example.firebaseapp.com
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: vooye-ci
@@ -32,29 +33,37 @@ jobs:
       RAZORPAY_KEY_SECRET: placeholder
       RAZORPAY_WEBHOOK_SECRET: placeholder
       NEXT_PUBLIC_RAZORPAY_KEY_ID: rzp_test_placeholder
+      NEXT_PUBLIC_STORE_URL: https://vooye.in
       SHIPPING_FLAT_FEE_PAISE: "9900"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: vooye-production/package-lock.json
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
 
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Lint
         run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Test
         run: npm test
 
-      - name: Build
+      - name: Production build
         run: npm run build

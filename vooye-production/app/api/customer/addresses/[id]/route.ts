@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
+import { isValidPostalCode, normalizeE164Phone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,13 +125,28 @@ async function validateBody(request: NextRequest) {
     }
   }
 
-  if (!/^\+[1-9]\d{7,14}$/.test(String(body.phone_e164).trim())) {
+  const normalizedPhone = normalizeE164Phone(body.phone_e164);
+  if (!normalizedPhone) {
     return { error: "Enter the phone number with country code, for example +919876543210." };
+  }
+
+  const addressType = String(body.address_type).trim().toLowerCase();
+  if (addressType !== "shipping" && addressType !== "billing") {
+    return { error: "Choose Shipping or Billing for this address." };
   }
 
   const country = String(body.country_code ?? "IN").trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     return { error: "Enter a valid two-letter country code." };
+  }
+
+  if (country !== "IN") {
+    return { error: "Vooye currently accepts delivery addresses in India only." };
+  }
+
+  const postalCode = String(body.postal_code).trim();
+  if (!isValidPostalCode(postalCode, country)) {
+    return { error: country === "IN" ? "Enter a valid 6-digit Indian PIN code." : "Please enter a valid postal code." };
   }
 
   const data: Record<string, string | null> = {};
@@ -140,6 +156,8 @@ async function validateBody(request: NextRequest) {
     data[field] =
       typeof value === "string" && value.trim() ? value.trim() : null;
   }
+  data.address_type = addressType;
+  data.phone_e164 = normalizedPhone;
   data.country_code = country;
 
   return { data };

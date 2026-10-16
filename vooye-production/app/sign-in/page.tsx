@@ -14,7 +14,8 @@ import {
   signOut,
   type ConfirmationResult,
 } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase/client";
+import { getFirebaseAuth } from "@/lib/firebase-client";
+import { normalizeE164Phone } from "@/lib/validation";
 
 function safeNextPath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/account";
@@ -31,13 +32,29 @@ function SignInForm() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const errorCode = searchParams.get("error");
+    if (errorCode === "legacy_supabase_auth_disabled") {
+      setMessage("This older sign-in link is no longer supported. Continue using the Firebase sign-in options on this page.");
+    }
+  }, [searchParams]);
   const confirmation = useRef<ConfirmationResult | null>(null);
   const recaptcha = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => () => { recaptcha.current?.clear(); }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timeout = window.setTimeout(() => {
+      setResendCooldown((remaining) => Math.max(0, remaining - 1));
+    }, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [resendCooldown]);
 
   async function establishSession(user: import("firebase/auth").User) {
     const idToken = await user.getIdToken(true);
@@ -72,7 +89,7 @@ function SignInForm() {
     await run(async () => {
       const auth = getFirebaseAuth();
       if (mode === "reset") {
-        await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+        await sendPasswordResetEmail(auth, email.trim().toLowerCase(), { url: window.location.origin + "/sign-in" });
         setMessage("If an account exists for this email, password reset instructions have been sent.");
         return;
       }
@@ -94,19 +111,43 @@ function SignInForm() {
     });
   }
 
+  async function requestLoginOtp() {
+    const normalized = normalizeE164Phone(phone);
+    if (!normalized) throw new Error("Enter an international phone number, e.g. +919876543210.");
+    const auth = getFirebaseAuth();
+    recaptcha.current?.clear();
+    recaptcha.current = new RecaptchaVerifier(auth, "vooye-phone-recaptcha", { size: "normal" });
+    confirmation.current = await signInWithPhoneNumber(auth, normalized, recaptcha.current);
+    setOtpSent(true);
+    setResendCooldown(30);
+    setMessage("Verification code sent. Enter the code from your SMS.");
+  }
+
   async function sendPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await run(async () => {
-      const normalized = phone.trim();
-      if (!/^\\+[1-9]\\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
-      const auth = getFirebaseAuth();
-      if (!recaptcha.current) {
-        if (!document.getElementById("vooye-phone-recaptcha")) throw new Error("Phone verification is not ready. Reload and try again.");
-        recaptcha.current = new RecaptchaVerifier(auth, "vooye-phone-recaptcha", { size: "invisible" });
+      try {
+        await requestLoginOtp();
+      } catch (cause) {
+        recaptcha.current?.clear();
+        recaptcha.current = null;
+        confirmation.current = null;
+        throw cause;
       }
-      confirmation.current = await signInWithPhoneNumber(auth, normalized, recaptcha.current);
-      setOtpSent(true);
-      setMessage("Verification code sent. Enter the code from your SMS.");
+    });
+  }
+
+  async function resendPhoneOtp() {
+    if (resendCooldown > 0 || busy) return;
+    await run(async () => {
+      try {
+        await requestLoginOtp();
+      } catch (cause) {
+        recaptcha.current?.clear();
+        recaptcha.current = null;
+        confirmation.current = null;
+        throw cause;
+      }
     });
   }
 
@@ -142,10 +183,11 @@ function SignInForm() {
         ) : (
           <form className="stack" onSubmit={otpSent ? verifyPhoneOtp : sendPhoneOtp}>
             <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={otpSent || busy} required /></label>
-            {otpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
+            {otpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
             <div id="vooye-phone-recaptcha" />
             <button type="submit" disabled={busy || (otpSent && otp.length !== 6)}>{busy ? "Please wait…" : otpSent ? "Verify and sign in" : "Send verification code"}</button>
-            {otpSent && <button type="button" disabled={busy} onClick={() => { confirmation.current = null; setOtpSent(false); setOtp(""); setMessage(""); recaptcha.current?.clear(); recaptcha.current = null; }}>Use a different number</button>}
+            {otpSent && <button type="button" disabled={busy || resendCooldown > 0} onClick={() => void resendPhoneOtp()}>{resendCooldown > 0 ? "Resend code in " + resendCooldown + "s" : "Resend verification code"}</button>}
+            {otpSent && <button type="button" disabled={busy} onClick={() => { confirmation.current = null; setOtpSent(false); setOtp(""); setResendCooldown(0); setMessage(""); recaptcha.current?.clear(); recaptcha.current = null; }}>Use a different number</button>}
           </form>
         )}
         {message && <p role="status" className="notice">{message}</p>}
