@@ -54,3 +54,9 @@ Advisors:
 3. Implement a server-backed cart/checkout flow, address selection from saved addresses, delivery serviceability rules, taxes/shipping, inventory reservation, Razorpay order/payment reconciliation, idempotent webhooks, refund, expiry release and support handling.
 4. Add integration tests for Firebase identity/session, ownership isolation, OTP delivery and invalid/expired OTPs, addresses, seller approval, duplicate webhook, payment failure/late capture, stock conflict and refunds.
 5. Test a real Razorpay test-mode lifecycle and non-production SMS end-to-end. Keep live payments off until the checklist is verified.
+
+
+## Additional hardening after initial audit
+- The Razorpay order-creation API is now fail-closed behind `CHECKOUT_ENABLED=true`; unset/false returns 503 before creating a payment order. The cart UI remains non-checkout-capable.
+- Fixed over-escaped E.164 phone and six-digit PIN/OTP regexes in account/phone/address flows. The browser and API must use a single literal backslash in regex source (e.g. `/^\\+[1-9]\\d{7,14}$/` in Markdown code).
+- Added a transactional Supabase RPC for seller-status transitions; it writes the status and audit record atomically, with execution denied to `anon` and `authenticated` and granted to `service_role` only.
