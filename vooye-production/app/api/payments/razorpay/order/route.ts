@@ -5,6 +5,7 @@ import { authenticate } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { razorpayClient } from "@/lib/razorpay";
 import { isValidIndianPin, normalizeE164Phone } from "@/lib/validation";
+import { isCheckoutReady } from "@/lib/checkout-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ async function releaseReservation(orderId: string, reason: string) {
 }
 
 export async function POST(request: Request) {
-  if (process.env.CHECKOUT_ENABLED !== "true") {
+  if (!isCheckoutReady()) {
     return fail("Checkout is temporarily unavailable while payment, shipping, and inventory safety checks are finalized.", 503);
   }
 
