@@ -128,6 +128,11 @@ async function validateBody(request: NextRequest) {
     return { error: "Enter the phone number with country code, for example +919876543210." };
   }
 
+  const addressType = String(body.address_type).trim().toLowerCase();
+  if (addressType !== "shipping" && addressType !== "billing") {
+    return { error: "Choose Shipping or Billing for this address." };
+  }
+
   const country = String(body.country_code ?? "IN").trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     return { error: "Enter a valid two-letter country code." };
@@ -145,6 +150,7 @@ async function validateBody(request: NextRequest) {
     data[field] =
       typeof value === "string" && value.trim() ? value.trim() : null;
   }
+  data.address_type = addressType;
   data.country_code = country;
 
   return { data };
