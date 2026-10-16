@@ -32,6 +32,8 @@ export default function AdminPortal() {
   const [applications, setApplications] = useState<SellerApplication[]>([]);
   const [filter, setFilter] = useState<"pending" | "all" | SellerStatus>("pending");
   const [reasonByUid, setReasonByUid] = useState<Record<string, string>>({});
+  const [auditByUid, setAuditByUid] = useState<Record<string, AuditEvent[]>>({});
+  const [expandedUid, setExpandedUid] = useState<string | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -89,6 +91,17 @@ export default function AdminPortal() {
 
 
 
+  const loadAudit = async (uid: string) => {
+    setError("");
+    try {
+      const payload = await authorizedFetch(`/api/admin/sellers/audit?firebase_uid=${encodeURIComponent(uid)}`);
+      setAuditByUid((previous) => ({ ...previous, [uid]: payload.events ?? [] }));
+      setExpandedUid(uid);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load audit history.");
+    }
+  };
+
   const updateStatus = async (seller: SellerApplication, status: SellerStatus) => {
     const reason = (reasonByUid[seller.firebase_uid] ?? "").trim();
     if ((status === "rejected" || status === "suspended") && reason.length < 5) {
@@ -111,6 +124,8 @@ export default function AdminPortal() {
         }),
       });
       setMessage(`${seller.store_name}: status changed to ${status}.`);
+      setFilter("all");
+      await loadAudit(seller.firebase_uid);
       await loadApplications();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to update seller status.");
@@ -191,9 +206,24 @@ export default function AdminPortal() {
                 </>}
                 {seller.status === "approved" && <button disabled={busyUid === seller.firebase_uid} onClick={() => void updateStatus(seller, "suspended")}>Suspend seller</button>}
                 {seller.status === "suspended" && <button disabled={busyUid === seller.firebase_uid} onClick={() => void updateStatus(seller, "approved")}>Reinstate seller</button>}
-
+                <button type="button" disabled={busyUid === seller.firebase_uid} onClick={() => void loadAudit(seller.firebase_uid)}>
+                  {expandedUid === seller.firebase_uid ? "Refresh audit history" : "View audit history"}
+                </button>
               </div>
-
+              {expandedUid === seller.firebase_uid && (
+                <div className="audit">
+                  <h3>Audit history</h3>
+                  {(auditByUid[seller.firebase_uid] ?? []).length === 0
+                    ? <p>No status changes recorded yet.</p>
+                    : <ol>{auditByUid[seller.firebase_uid].map((event) => (
+                      <li key={event.id}>
+                        <strong>{event.previous_status} → {event.new_status}</strong>
+                        <p>{event.reason || "No reason recorded."}</p>
+                        <small>{new Date(event.created_at).toLocaleString()} · Admin UID: {event.admin_firebase_uid}</small>
+                      </li>
+                    ))}</ol>}
+                </div>
+              )}
             </article>
           ))}
         </div>
