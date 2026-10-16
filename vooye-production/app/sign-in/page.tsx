@@ -79,14 +79,8 @@ function SignInForm() {
 
   async function sendPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await run(async () => {
-      const normalized = phone.trim();
-      if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
-      const { error } = await createClient().auth.signInWithOtp({ phone: normalized, options: { shouldCreateUser: true } });
-      if (error) throw error;
-      setOtpSent(true);
-      setMessage("Verification code sent. Enter the code from your SMS.");
-    });
+    setError("");
+    setMessage("Phone sign-in is temporarily unavailable while secure Firebase-to-Supabase session integration is completed. Use Google or email/password for now. No SMS has been sent.");
   }
 
   async function verifyPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
