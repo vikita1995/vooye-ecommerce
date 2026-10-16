@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 
 type SellerStatus = "pending" | "approved" | "rejected" | "suspended";
 type SellerApplication = {
@@ -32,8 +32,6 @@ export default function AdminPortal() {
   const [applications, setApplications] = useState<SellerApplication[]>([]);
   const [filter, setFilter] = useState<"pending" | "all" | SellerStatus>("pending");
   const [reasonByUid, setReasonByUid] = useState<Record<string, string>>({});
-  const [auditByUid, setAuditByUid] = useState<Record<string, AuditEvent[]>>({});
-  const [expandedUid, setExpandedUid] = useState<string | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -41,27 +39,22 @@ export default function AdminPortal() {
 
   useEffect(() => {
     let active = true;
-    const supabase = createClient();
-    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error: sessionError } = result;
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
       if (!active) return;
-      if (sessionError) setError("Unable to verify your sign-in session.");
-      setUser(data.session?.user ?? null);
+      setUser(firebaseUser);
       setAuthReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      if (!active) return;
-      setUser(session?.user ?? null);
-      setAuthReady(true);
-    });
-    return () => { active = false; subscription.unsubscribe(); };
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const authorizedFetch = useCallback(async (url: string, init: RequestInit = {}) => {
     if (!user) throw new Error("Sign in with an administrator account first.");
-    const { data: { session }, error: sessionError } = await createClient().auth.getSession();
-    if (sessionError || !session?.access_token) throw new Error("Please sign in again.");
-    const token = session.access_token;
+    const firebaseUser = getFirebaseAuth().currentUser;
+    if (!firebaseUser) throw new Error("Please sign in again.");
+    const token = await firebaseUser.getIdToken();
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -94,16 +87,7 @@ export default function AdminPortal() {
     void loadApplications();
   }, [loadApplications]);
 
-  const loadAudit = async (uid: string) => {
-    setError("");
-    try {
-      const payload = await authorizedFetch(`/api/admin/sellers/audit?firebase_uid=${encodeURIComponent(uid)}`);
-      setAuditByUid((old) => ({ ...old, [uid]: payload.events ?? [] }));
-      setExpandedUid(uid);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load audit history.");
-    }
-  };
+
 
   const updateStatus = async (seller: SellerApplication, status: SellerStatus) => {
     const reason = (reasonByUid[seller.firebase_uid] ?? "").trim();
@@ -128,7 +112,6 @@ export default function AdminPortal() {
       });
       setMessage(`${seller.store_name}: status changed to ${status}.`);
       await loadApplications();
-      await loadAudit(seller.firebase_uid);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to update seller status.");
     } finally {
@@ -155,7 +138,7 @@ export default function AdminPortal() {
       <section className="section">
         <div className="eyebrow">Operations</div>
         <h1>Seller administration</h1>
-        <p className="muted">Review seller applications, manage seller access, and inspect status-change audit history. The server authorizes every operation independently.</p>
+        <p className="muted">Review seller applications and manage seller access. The server authorizes every operation independently.</p>
 
         {message && <p role="status" className="notice">{message}</p>}
         {error && <p role="alert" className="notice">{error}</p>}
@@ -208,24 +191,9 @@ export default function AdminPortal() {
                 </>}
                 {seller.status === "approved" && <button disabled={busyUid === seller.firebase_uid} onClick={() => void updateStatus(seller, "suspended")}>Suspend seller</button>}
                 {seller.status === "suspended" && <button disabled={busyUid === seller.firebase_uid} onClick={() => void updateStatus(seller, "approved")}>Reinstate seller</button>}
-                <button type="button" disabled={busyUid === seller.firebase_uid} onClick={() => void loadAudit(seller.firebase_uid)}>
-                  {expandedUid === seller.firebase_uid ? "Refresh audit history" : "View audit history"}
-                </button>
+
               </div>
-              {expandedUid === seller.firebase_uid && (
-                <div className="audit">
-                  <h3>Audit history</h3>
-                  {(auditByUid[seller.firebase_uid] ?? []).length === 0
-                    ? <p>No audit events found.</p>
-                    : <ol>{auditByUid[seller.firebase_uid].map((event) => (
-                      <li key={event.id}>
-                        <strong>{event.previous_status} → {event.new_status}</strong>
-                        <p>{event.reason || "No reason recorded."}</p>
-                        <small>{new Date(event.created_at).toLocaleString()} · Admin UID: {event.admin_firebase_uid}</small>
-                      </li>
-                    ))}</ol>}
-                </div>
-              )}
+
             </article>
           ))}
         </div>
