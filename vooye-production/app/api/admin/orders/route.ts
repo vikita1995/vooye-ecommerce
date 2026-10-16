@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 /**
  * PATCH /api/admin/orders — only allow fulfilment transitions after payment.
  * This endpoint cannot mark orders paid/captured; that is reserved for the
- * verified Razorpay callback/webhook.
+ * verified Razorpay callback/webhook. A paid order cannot be cancelled here unless a refund workflow handles it.
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -111,15 +111,15 @@ export async function PATCH(request: NextRequest) {
     const orderId = typeof input.order_id === "string" ? input.order_id.trim() : "";
     const nextStatus = input.status;
     if (!orderId || orderId.length > 128) return fail("A valid order ID is required.", 400);
-    if (nextStatus !== "PROCESSING" && nextStatus !== "SHIPPED" && nextStatus !== "DELIVERED" && nextStatus !== "CANCELLED" && nextStatus !== "REFUND_PENDING") {
+    if (nextStatus !== "PROCESSING" && nextStatus !== "SHIPPED" && nextStatus !== "DELIVERED" && nextStatus !== "REFUND_PENDING") {
       return fail("This order status cannot be set manually.", 400);
     }
 
     const current = await db.order.findUnique({ where: { id: orderId } });
     if (!current) return fail("Order not found.", 404);
     const transitions: Partial<Record<OrderStatus, OrderStatus[]>> = {
-      PAID: ["PROCESSING", "CANCELLED", "REFUND_PENDING"],
-      PROCESSING: ["SHIPPED", "CANCELLED", "REFUND_PENDING"],
+      PAID: ["PROCESSING", "REFUND_PENDING"],
+      PROCESSING: ["SHIPPED", "REFUND_PENDING"],
       SHIPPED: ["DELIVERED", "REFUND_PENDING"],
     };
     if (!transitions[current.status]?.includes(nextStatus as OrderStatus)) {
