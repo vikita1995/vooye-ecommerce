@@ -20,7 +20,7 @@ export async function middleware(request: NextRequest) {
   const isProtectedApi = startsWithRoute(pathname, API_PREFIXES);
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
-  // API handlers enforce their own authorization. Never rely on middleware alone.
+  // API handlers must perform their own authorization; middleware is defense in depth.
   if (isProtectedApi) return NextResponse.next();
 
   const sessionCookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
@@ -34,13 +34,12 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === "/admin/login") {
-    // A valid session is not necessarily an admin; the login page must still
-    // perform its own admin check before redirecting authenticated users.
+    // The dedicated login page handles existing sessions and performs the server check.
     return noStore(NextResponse.next());
   }
 
   if (!user) {
-    const destination = pathname.startsWith("/admin") ? "/admin/login" : "/sign-in";
+    const destination = pathname === "/admin" || pathname.startsWith("/admin/") ? "/admin/login" : "/sign-in";
     const signInUrl = new URL(destination, request.url);
     signInUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return noStore(NextResponse.redirect(signInUrl));
