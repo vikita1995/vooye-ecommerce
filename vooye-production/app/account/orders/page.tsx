@@ -29,6 +29,8 @@ type Order = {
   created_at: string;
   customer_note: string | null;
   items: OrderItem[];
+  payment_status?: string;
+  invoice_order_id?: string | null;
 };
 
 function money(amount: number | string, currency: string) {
@@ -58,6 +60,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [invoiceError, setInvoiceError] = useState("");
+  const [invoiceBusyOrderId, setInvoiceBusyOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -106,17 +110,51 @@ export default function OrdersPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/customer/orders", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [legacyResult, commerceResult] = await Promise.allSettled([
+        fetch("/api/customer/orders", { headers, cache: "no-store" }),
+        fetch("/api/customer/commerce-orders", { headers, cache: "no-store" }),
+      ]);
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to load orders.");
+      let legacyOrders: Order[] = [];
+      let commerceOrders: Order[] = [];
+      let legacyError = "Unable to load your saved order history.";
+      let commerceError = "Prisma commerce order history is unavailable.";
+
+      if (legacyResult.status === "fulfilled") {
+        const response = legacyResult.value;
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) legacyOrders = data.orders ?? [];
+        else legacyError = data.error || legacyError;
+      } else {
+        legacyError = legacyResult.reason instanceof Error ? legacyResult.reason.message : legacyError;
       }
 
-      setOrders(data.orders ?? []);
+      if (commerceResult.status === "fulfilled") {
+        const response = commerceResult.value;
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) commerceOrders = data.orders ?? [];
+        else commerceError = data.error || commerceError;
+      } else {
+        commerceError = commerceResult.reason instanceof Error ? commerceResult.reason.message : commerceError;
+      }
+
+      if (legacyResult.status === "rejected" && commerceResult.status === "rejected" ||
+          legacyOrders.length === 0 && commerceOrders.length === 0 &&
+          legacyResult.status === "fulfilled" && !legacyResult.value.ok &&
+          commerceResult.status === "fulfilled" && !commerceResult.value.ok) {
+        throw new Error(`${legacyError} ${commerceError}`);
+      }
+
+      // Keep legacy orders visible while the Prisma commerce model is migrated;
+      // prefer the Prisma row for matching order numbers because it supports invoices.
+      const merged = new Map<string, Order>();
+      for (const order of legacyOrders) merged.set(order.order_number, order);
+      for (const order of commerceOrders) merged.set(order.order_number, order);
+      setOrders(Array.from(merged.values()).sort((a, b) =>
+        new Date(b.placed_at || b.created_at).getTime() -
+        new Date(a.placed_at || a.created_at).getTime()
+      ));
     } catch (cause) {
       setMessage(
         cause instanceof Error ? cause.message : "Unable to load orders."
@@ -129,6 +167,36 @@ export default function OrdersPage() {
   useEffect(() => {
     if (token) void loadOrders();
   }, [token, loadOrders]);
+  async function downloadInvoice(order: Order) {
+    if (!token || !order.invoice_order_id) return;
+    setInvoiceBusyOrderId(order.id);
+    setInvoiceError("");
+    try {
+      const response = await fetch(`/api/customer/orders/${encodeURIComponent(order.invoice_order_id)}/invoice`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || "Unable to download this invoice.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `invoice-${order.order_number}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (cause) {
+      setInvoiceError(cause instanceof Error ? cause.message : "Unable to download this invoice.");
+    } finally {
+      setInvoiceBusyOrderId(null);
+    }
+  }
+
 
   if (!authReady || (loading && !token)) {
     return (
@@ -153,8 +221,9 @@ export default function OrdersPage() {
         <div className="eyebrow">Your account</div>
         <h1>Order history</h1>
         <p className="muted">
-          View your purchases and the items included in each order.
+          View your purchases, payment status, and available invoices.
         </p>
+        {invoiceError && <p role="alert" className="notice">{invoiceError}</p>}
 
         {!token ? (
           <div className="empty">
@@ -196,7 +265,14 @@ export default function OrdersPage() {
                       )}
                     </p>
                   </div>
-                  <p><strong>{readableStatus(order.status)}</strong></p>
+                  <div style={{ display: "grid", justifyItems: "end", gap: 8 }}>
+                    <p><strong>{readableStatus(order.status)}</strong>{order.payment_status ? ` · ${readableStatus(order.payment_status)}` : ""}</p>
+                    {order.invoice_order_id && (
+                      <button type="button" disabled={invoiceBusyOrderId === order.id} onClick={() => void downloadInvoice(order)}>
+                        {invoiceBusyOrderId === order.id ? "Preparing invoice…" : "Download invoice PDF"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ marginTop: 16 }}>

@@ -70,6 +70,14 @@ Enable Firebase Authentication providers you intend to support. Add your product
 - Test payment success, cancellation, timeout, payment failure, inventory conflict, refund and reconciliation.
 - Before live activation, implement and test refund API/workflow and periodic reconciliation. Do not enable live keys before the release checklist is complete.
 
+## Invoices
+
+- Review `docs/INVOICES.md` for invoice configuration, PDF download behavior, optional Resend delivery, and tax limitations.
+- Apply the `prisma/migrations/20261016150000_add_invoices/migration.sql` migration using a controlled environment with the production `DIRECT_URL` before relying on invoice downloads.
+- Configure `INVOICE_SELLER_LEGAL_NAME` and `INVOICE_SELLER_ADDRESS` as server-side Cloud Run settings. Set GSTIN only if applicable and verified.
+- Optional automatic email requires `RESEND_API_KEY` and a verified `INVOICE_FROM_EMAIL`; never expose the API key to the browser.
+- The current checkout does not calculate GST separately. Generated documents are order invoice/payment records, not GST tax invoices.
+
 ## Custom domain
 Map `vooye.in` to Cloud Run using the chosen domain mapping / load balancer setup, configure DNS exactly as instructed by Google Cloud, enforce HTTPS, then add the domain to Firebase Auth authorized domains and `NEXT_PUBLIC_STORE_URL`.
 
