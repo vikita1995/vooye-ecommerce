@@ -22,6 +22,7 @@ type Address = {
 };
 
 type AddressForm = Omit<Address, "id">;
+type AddressErrors = Partial<Record<keyof AddressForm, string>>;
 
 const blankForm: AddressForm = {
   address_type: "shipping",
@@ -46,6 +47,7 @@ export default function AddressesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<AddressErrors>({});
 
   useEffect(() => {
     let active = true;
@@ -116,12 +118,50 @@ export default function AddressesPage() {
 
   function updateField(field: keyof AddressForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateForm(values: AddressForm): AddressErrors {
+    const errors: AddressErrors = {};
+    const required: (keyof AddressForm)[] = [
+      "recipient_name", "phone_e164", "address_line1", "locality",
+      "city", "state", "postal_code",
+    ];
+    for (const field of required) {
+      if (!String(values[field] ?? "").trim()) {
+        errors[field] = "This field is required.";
+      }
+    }
+    if (values.recipient_name.trim().length < 2) {
+      errors.recipient_name = "Enter the recipient's full name.";
+    }
+    if (values.address_line1.trim().length < 4) {
+      errors.address_line1 = "Enter a complete street address.";
+    }
+    if (!/^\\+[1-9]\\d{7,14}$/.test(values.phone_e164.trim())) {
+      errors.phone_e164 = "Enter a phone number with country code, e.g. +919876543210.";
+    }
+    if (values.country_code === "IN" && !/^\\d{6}$/.test(values.postal_code.trim())) {
+      errors.postal_code = "Enter a valid 6-digit Indian PIN code.";
+    }
+    if (values.address_type !== "shipping" && values.address_type !== "billing") {
+      errors.address_type = "Choose Shipping or Billing.";
+    }
+    if (values.country_code !== "IN") {
+      errors.country_code = "Delivery outside India is not enabled yet.";
+    }
+    return errors;
   }
 
   function startEdit(address: Address) {
     const { id, ...values } = address;
     setEditingId(id);
     setForm({ ...blankForm, ...values });
+    setFieldErrors({});
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -129,12 +169,20 @@ export default function AddressesPage() {
   function cancelEdit() {
     setEditingId(null);
     setForm(blankForm);
+    setFieldErrors({});
     setMessage("");
   }
 
   async function saveAddress(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
+
+    const validationErrors = validateForm(form);
+    setFieldErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      setMessage("Please correct the highlighted address fields.");
+      return;
+    }
 
     setSaving(true);
     setMessage("");
@@ -160,6 +208,7 @@ export default function AddressesPage() {
       setMessage(editingId ? "Address updated successfully." : "Address saved successfully.");
       setEditingId(null);
       setForm(blankForm);
+      setFieldErrors({});
       await loadAddresses();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to save address.");
@@ -251,6 +300,18 @@ export default function AddressesPage() {
               <option value="shipping">Shipping</option>
               <option value="billing">Billing</option>
             </select>
+            {fieldErrors.address_type && <span role="alert" style={{ display: "block", color: "#b42318", marginTop: 4 }}>{fieldErrors.address_type}</span>}
+          </label>
+          <label style={{ display: "block", marginTop: 14 }}>
+            Country
+            <select
+              value={form.country_code}
+              onChange={(event) => updateField("country_code", event.target.value)}
+              required
+            >
+              <option value="IN">India</option>
+            </select>
+            {fieldErrors.country_code && <span role="alert" style={{ display: "block", color: "#b42318", marginTop: 4 }}>{fieldErrors.country_code}</span>}
           </label>
 
           {fields.map(({ key, label, required, placeholder }) => (
@@ -262,8 +323,11 @@ export default function AddressesPage() {
                 required={required}
                 placeholder={placeholder}
                 maxLength={key === "address_line1" || key === "address_line2" ? 200 : 150}
-                style={{ display: "block", width: "100%", marginTop: 6, padding: 10 }}
+                style={{ display: "block", width: "100%", marginTop: 6, padding: 10, borderColor: fieldErrors[key] ? "#b42318" : undefined }}
+                aria-invalid={Boolean(fieldErrors[key])}
+                aria-describedby={fieldErrors[key] ? `address-error-${key}` : undefined}
               />
+              {fieldErrors[key] && <span id={`address-error-${key}`} role="alert" style={{ display: "block", color: "#b42318", marginTop: 4 }}>{fieldErrors[key]}</span>}
             </label>
           ))}
 
