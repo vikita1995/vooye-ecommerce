@@ -37,15 +37,17 @@ function sha256(value: unknown) {
 
 async function releaseReservation(orderId: string, reason: string) {
   await db.$transaction(async (tx) => {
+    const cancelled = await tx.order.updateMany({
+      where: { id: orderId, status: "PENDING_PAYMENT", paymentStatus: "CREATED" },
+      data: { status: "CANCELLED", paymentStatus: "FAILED" },
+    });
+    if (cancelled.count !== 1) return;
+
     const releasedKey = "inventory_released:" + orderId;
     const alreadyReleased = await tx.paymentEvent.findUnique({ where: { providerEventId: releasedKey } });
     if (alreadyReleased) return;
 
-    const order = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, status: true, paymentStatus: true } });
-    if (!order) return;
     const reservation = await tx.paymentEvent.findUnique({ where: { providerEventId: "inventory_reserved:" + orderId } });
-
-    // Never add stock back for legacy orders that were not reserved by this version.
     if (reservation) {
       const items = await tx.orderItem.findMany({ where: { orderId } });
       for (const item of items) {
@@ -218,12 +220,6 @@ export async function POST(request: Request) {
         keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       }, { status: 201, headers: { "Cache-Control": "no-store" } });
     } catch {
-      await db.$transaction(async (tx) => {
-        await tx.order.updateMany({
-          where: { id: order.id, status: "PENDING_PAYMENT", paymentStatus: "CREATED" },
-          data: { status: "CANCELLED", paymentStatus: "FAILED" },
-        });
-      });
       await releaseReservation(order.id, "provider_order_creation_failed");
       return fail("Unable to start Razorpay checkout. Please try again.", 503);
     }
