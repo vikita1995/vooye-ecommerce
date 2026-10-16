@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
+import { isValidPostalCode, normalizeE164Phone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,12 +109,12 @@ function validateAddress(input: unknown) {
 
   const postalCode = String(body.postal_code).trim();
   const countryForPostal = String(body.country_code ?? "IN").trim().toUpperCase();
-  if (countryForPostal === "IN" ? !/^\d{6}$/.test(postalCode) : !/^[A-Za-z0-9 -]{3,20}$/.test(postalCode)) {
+  if (!isValidPostalCode(postalCode, countryForPostal)) {
     return { error: countryForPostal === "IN" ? "Enter a valid 6-digit Indian PIN code." : "Please enter a valid postal code." };
   }
 
-  const phone = String(body.phone_e164).trim();
-  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+  const phone = normalizeE164Phone(body.phone_e164);
+  if (!phone) {
     return {
       error: "Enter the phone number with country code, for example +919876543210.",
     };
@@ -142,6 +143,7 @@ function validateAddress(input: unknown) {
   }
 
   clean.address_type = addressType;
+  clean.phone_e164 = phone;
   clean.country_code = country;
   return { data: clean };
 }
