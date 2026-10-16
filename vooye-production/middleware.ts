@@ -1,5 +1,5 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { FIREBASE_SESSION_COOKIE, verifyFirebaseSessionCookie } from "@/lib/firebase/admin";
 
 const PAGE_PREFIXES = ["/account", "/seller", "/admin"];
 const API_PREFIXES = ["/api/customer", "/api/seller", "/api/admin"];
@@ -20,77 +20,64 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isProtectedPage = startsWithRoute(pathname, PAGE_PREFIXES);
   const isProtectedApi = startsWithRoute(pathname, API_PREFIXES);
-
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) {
-    return isProtectedApi
-      ? NextResponse.json({ error: "Authentication service is not configured." }, { status: 503 })
-      : NextResponse.redirect(new URL("/sign-in?error=auth_not_configured", request.url));
+  // APIs authenticate Firebase ID tokens in their route handlers. The session
+  // cookie is for browser page navigation only and is HttpOnly.
+  if (isProtectedApi) return NextResponse.next();
+
+  const sessionCookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
+  let user: Awaited<ReturnType<typeof verifyFirebaseSessionCookie>> | null = null;
+  if (sessionCookie) {
+    try {
+      user = await verifyFirebaseSessionCookie(sessionCookie);
+    } catch {
+      user = null;
+    }
   }
 
-  let response = NextResponse.next({ request });
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll(cookiesToSet, headers) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-        if (headers) {
-          Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
-        }
-      },
-    },
-  });
-
-  const { data, error } = await supabase.auth.getUser();
-  const user = data.user;
-
-  if (error || !user) {
-    if (isProtectedApi) {
-      return NextResponse.json({ error: "Authentication required." }, {
-        status: 401,
-        headers: { "Cache-Control": "no-store" },
-      });
-    }
+  if (!user) {
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("next", pathname + request.nextUrl.search);
-    return NextResponse.redirect(signInUrl);
+    const response = NextResponse.redirect(signInUrl);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 
-  if (pathname === "/admin" || pathname.startsWith("/admin/") ||
-      pathname === "/api/admin" || pathname.startsWith("/api/admin/")) {
-    let isAdmin = isAdminAllowed(user.id);
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    let isAdmin = isAdminAllowed(user.uid);
     if (!isAdmin) {
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      isAdmin = profile?.role === "admin";
+      // Preserve database role authorization using the Firebase UID. A server
+      // API must still enforce admin access independently for every mutation.
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (url && key) {
+        try {
+          const query = new URL("/rest/v1/user_profiles", url);
+          query.searchParams.set("select", "role");
+          query.searchParams.set("user_id", `eq.${user.uid}`);
+          const result = await fetch(query, {
+            headers: { apikey: key, Authorization: `Bearer ${key}` },
+            cache: "no-store",
+          });
+          if (result.ok) {
+            const profiles = (await result.json()) as Array<{ role?: string }>;
+            isAdmin = profiles[0]?.role === "admin";
+          }
+        } catch {
+          isAdmin = false;
+        }
+      }
     }
-
-    if (!isAdmin) {
-      return isProtectedApi
-        ? NextResponse.json({ error: "Administrator access required." }, { status: 403 })
-        : NextResponse.redirect(new URL("/account?error=forbidden", request.url));
-    }
+    if (!isAdmin) return NextResponse.redirect(new URL("/account?error=forbidden", request.url));
   }
 
+  const response = NextResponse.next();
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 
 export const config = {
-  matcher: [
-    "/account/:path*",
-    "/seller/:path*",
-    "/admin/:path*",
-    "/api/customer/:path*",
-    "/api/seller/:path*",
-    "/api/admin/:path*",
-  ],
+  runtime: "nodejs",
+  matcher: ["/account/:path*", "/seller/:path*", "/admin/:path*", "/api/customer/:path*", "/api/seller/:path*", "/api/admin/:path*"],
 };

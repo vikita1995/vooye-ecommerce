@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest) {
       return fail("Enter a valid international phone number.", 400);
     }
 
-    // Trust only a phone number confirmed by Supabase Auth.
+    // Trust only the phone number verified and linked to the Firebase ID token.
     if (!decoded.phone_verified || decoded.phone_number !== requestedPhone) {
       return fail(
         "Supabase Auth has not verified this number on your account.",
