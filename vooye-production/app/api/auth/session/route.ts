@@ -23,6 +23,13 @@ function safeErrorCode(error: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Session creation is only for interactive login; block cross-site session fixation.
+  const origin = request.headers.get("origin");
+  const expectedOrigin = request.nextUrl.origin;
+  if (origin && origin !== expectedOrigin) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const authorization = request.headers.get("authorization") ?? "";
   const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!idToken || idToken.length > 16_384) {
