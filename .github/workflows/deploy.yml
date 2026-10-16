@@ -81,12 +81,18 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION REPOSITORY SERVICE WIF_PROVIDER WIF_SERVICE_ACCOUNT NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_RAZORPAY_KEY_ID NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; do
+          for name in PROJECT_ID REGION REPOSITORY SERVICE WIF_PROVIDER WIF_SERVICE_ACCOUNT NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; do
             if [[ -z "$(printenv "$name")" ]]; then
               echo "::error title=Missing GitHub Actions variable::$name is empty. Configure it under Settings > Secrets and variables > Actions > Variables."
               exit 1
             fi
           done
+
+          # Storefront deployments are allowed while Razorpay checkout is intentionally disabled.
+          # The server-side isCheckoutReady() gate remains closed when this public key is absent.
+          if [[ -z "${NEXT_PUBLIC_RAZORPAY_KEY_ID:-}" ]]; then
+            echo "::warning title=Razorpay checkout remains disabled::NEXT_PUBLIC_RAZORPAY_KEY_ID is empty. Configure the public Razorpay key and complete checkout go-live checks before enabling checkout."
+          fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
