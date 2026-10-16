@@ -96,6 +96,13 @@ export async function GET(request: NextRequest) {
   );
 
   const supabase = createServerClient(url, key, {
+    cookieOptions: {
+      ...(process.env.NODE_ENV === "production"
+        ? { domain: ".vooye.in", secure: true }
+        : {}),
+      sameSite: "lax",
+      path: "/",
+    },
     cookies: {
       getAll() {
         return request.cookies.getAll();
