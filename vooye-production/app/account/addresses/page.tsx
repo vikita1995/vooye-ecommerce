@@ -24,7 +24,7 @@ type Address = {
 type AddressForm = Omit<Address, "id">;
 
 const blankForm: AddressForm = {
-  address_type: "Home",
+  address_type: "shipping",
   recipient_name: "",
   phone_e164: "",
   address_line1: "",
@@ -248,9 +248,8 @@ export default function AddressesPage() {
               onChange={(event) => updateField("address_type", event.target.value)}
               required
             >
-              <option value="Home">Home</option>
-              <option value="Work">Work</option>
-              <option value="Other">Other</option>
+              <option value="shipping">Shipping</option>
+              <option value="billing">Billing</option>
             </select>
           </label>
 
@@ -290,7 +289,7 @@ export default function AddressesPage() {
             <div style={{ display: "grid", gap: 16 }}>
               {addresses.map((address) => (
                 <article className="empty" key={address.id}>
-                  <h3>{address.address_type} — {address.recipient_name}</h3>
+                  <h3>{address.address_type === "billing" ? "Billing" : "Shipping"} — {address.recipient_name}</h3>
                   <p>{address.phone_e164}</p>
                   <p>
                     {address.address_line1}
