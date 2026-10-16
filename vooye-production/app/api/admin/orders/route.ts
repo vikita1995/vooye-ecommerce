@@ -39,37 +39,49 @@ export async function GET(request: NextRequest) {
     if (statusParam && statusParam !== "all" && !allowedStatuses.has(statusParam as OrderStatus)) {
       return fail("Invalid order status filter.", 400);
     }
-    const orders = await db.order.findMany({
+    const rows = await db.order.findMany({
       where: statusParam && statusParam !== "all" ? { status: statusParam as OrderStatus } : undefined,
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
         user: { select: { email: true, displayName: true } },
-        items: { select: { id: true, productName: true, quantity: true, unitPricePaise: true, lineTotalPaise: true } },
+        items: {
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            productName: true,
+            quantity: true,
+            unitPricePaise: true,
+            lineTotalPaise: true,
+            seller: { select: { storeName: true, slug: true } },
+          },
+        },
       },
     });
-    return NextResponse.json({
-      orders: orders.map((order) => ({
-        id: order.id,
-        order_number: order.orderNumber,
-        customer_email: order.user.email,
-        customer_name: order.shippingName || order.user.displayName,
-        status: order.status,
-        payment_status: order.paymentStatus,
-        currency: order.currency,
-        subtotal: order.subtotalPaise / 100,
-        shipping_amount: order.shippingPaise / 100,
-        total_amount: order.totalPaise / 100,
-        created_at: order.createdAt.toISOString(),
-        items: order.items.map((item) => ({
-          id: item.id,
-          product_name: item.productName,
-          quantity: item.quantity,
-          unit_price: item.unitPricePaise / 100,
-          line_total: item.lineTotalPaise / 100,
-        })),
-      })),
-    }, { headers: { "Cache-Control": "no-store" } });
+    const orders = rows.map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      currency: order.currency,
+      subtotalPaise: order.subtotalPaise,
+      shippingPaise: order.shippingPaise,
+      totalPaise: order.totalPaise,
+      shippingName: order.shippingName,
+      shippingPhone: order.shippingPhone,
+      shippingAddress1: order.shippingAddress1,
+      shippingAddress2: order.shippingAddress2,
+      shippingCity: order.shippingCity,
+      shippingState: order.shippingState,
+      shippingPostalCode: order.shippingPostalCode,
+      createdAt: order.createdAt.toISOString(),
+      user: order.user,
+      items: order.items,
+    }));
+    return NextResponse.json(
+      { orders },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (cause) {
     return handleError(cause);
   }
