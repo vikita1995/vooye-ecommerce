@@ -114,6 +114,7 @@ model Order {
   user                User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   items               OrderItem[]
   paymentEvents       PaymentEvent[]
+  invoice             Invoice?
   @@index([userId, createdAt])
   @@index([status, paymentExpiresAt])
 }
@@ -140,4 +141,32 @@ model PaymentEvent {
   processedAt       DateTime @default(now())
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
   @@index([orderId, processedAt])
+}
+
+
+model Invoice {
+  id                String   @id @default(cuid())
+  invoiceNumber     String   @unique
+  orderId           String   @unique
+  issuedAt          DateTime @default(now())
+  sellerLegalName   String
+  sellerAddress     String
+  sellerGstin       String?
+  sellerEmail       String?
+  sellerPhone       String?
+  buyerName         String
+  buyerEmail        String?
+  buyerPhone        String
+  shippingAddress   String
+  currency          String   @default("INR")
+  subtotalPaise     Int
+  shippingPaise     Int
+  taxPaise          Int      @default(0)
+  totalPaise        Int
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  createdAt         DateTime @default(now())
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([issuedAt])
 }
