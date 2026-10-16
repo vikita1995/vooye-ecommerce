@@ -8,10 +8,19 @@ const API_PREFIXES = ["/api/customer", "/api/seller", "/api/admin"];
 function startsWithRoute(pathname: string, prefixes: string[]) {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
-
 function noStore(response: NextResponse) {
   response.headers.set("Cache-Control", "private, no-store");
   return response;
+}
+async function isSessionAdmin(request: NextRequest) {
+  const cookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
+  if (!cookie) return false;
+  try {
+    const user = await verifyFirebaseSessionCookie(cookie);
+    return isAdminUid(user.uid);
+  } catch {
+    return false;
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -20,34 +29,32 @@ export async function middleware(request: NextRequest) {
   const isProtectedApi = startsWithRoute(pathname, API_PREFIXES);
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
-  // API handlers must perform their own authorization; middleware is defense in depth.
+  // API route handlers must enforce authorization independently.
   if (isProtectedApi) return NextResponse.next();
 
-  const sessionCookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
-  let user: Awaited<ReturnType<typeof verifyFirebaseSessionCookie>> | null = null;
-  if (sessionCookie) {
-    try {
-      user = await verifyFirebaseSessionCookie(sessionCookie);
-    } catch {
-      user = null;
-    }
-  }
-
-  if (pathname === "/admin/login") {
-    // The dedicated login page handles existing sessions and performs the server check.
-    return noStore(NextResponse.next());
-  }
-
-  if (!user) {
-    const destination = pathname === "/admin" || pathname.startsWith("/admin/") ? "/admin/login" : "/sign-in";
-    const signInUrl = new URL(destination, request.url);
-    signInUrl.searchParams.set("next", pathname + request.nextUrl.search);
-    return noStore(NextResponse.redirect(signInUrl));
-  }
+  if (pathname === "/admin/login") return noStore(NextResponse.next());
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    if (!isAdminUid(user.uid)) {
-      return noStore(NextResponse.redirect(new URL("/admin/login?error=not_admin", request.url)));
+    if (!(await isSessionAdmin(request))) {
+      const destination = new URL("/admin/login", request.url);
+      destination.searchParams.set("next", pathname + request.nextUrl.search);
+      return noStore(NextResponse.redirect(destination));
+    }
+  } else {
+    const cookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
+    let authenticated = false;
+    if (cookie) {
+      try {
+        await verifyFirebaseSessionCookie(cookie);
+        authenticated = true;
+      } catch {
+        authenticated = false;
+      }
+    }
+    if (!authenticated) {
+      const destination = new URL("/sign-in", request.url);
+      destination.searchParams.set("next", pathname + request.nextUrl.search);
+      return noStore(NextResponse.redirect(destination));
     }
   }
 
