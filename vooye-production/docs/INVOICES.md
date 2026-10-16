@@ -21,6 +21,10 @@ Set these as server-side Cloud Run environment variables or Secret Manager-backe
 
 If the required legal name or address is missing, payment completion is not blocked. Invoice issuance is logged as deferred and the download endpoint returns an actionable configuration error.
 
+## Database target verification is a release gate
+
+The connected Supabase project currently exposes the legacy snake_case tables (`public.orders`, `public.order_items`, `public.customers`, `public.products`) but does not expose the Prisma tables named `"Order"`, `"OrderItem"`, `"User"`, or `"Product"`. The invoice migration below references the Prisma `"Order"` table. **Do not apply this Prisma migration to that Supabase project unless Cloud Run's `DATABASE_URL` / `DIRECT_URL` are confirmed to target a database that already contains the Prisma schema.** If those URLs target the connected Supabase project, the application currently has two competing commerce data models; reconcile them before enabling invoice downloads. The app code uses both models today.
+
 ## Apply the database migration before using invoice downloads
 
 The schema migration is at `prisma/migrations/20261016150000_add_invoices/migration.sql`.
