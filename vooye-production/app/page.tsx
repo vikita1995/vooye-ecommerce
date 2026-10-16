@@ -40,7 +40,6 @@ export default async function Home() {
         <Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link>
         <nav className="nav">
           <Link href="/#shop">Shop</Link>
-          <Link href="/seller">Sell on Vooye</Link>
           <Link href="/account/orders">My orders</Link>
           <Link href="/cart">Cart</Link>
           <ProfileLink />
@@ -80,7 +79,7 @@ export default async function Home() {
 
       <section className="value-strip" aria-label="Vooye values">
         <div><span className="value-icon">✳</span><span><strong>Design-led finds</strong><small>Thoughtful details for every room</small></span></div>
-        <div><span className="value-icon">⌂</span><span><strong>Independent sellers</strong><small>Discover something different</small></span></div>
+        <div><span className="value-icon">⌂</span><span><strong>Thoughtfully curated</strong><small>Mirrors selected for your home</small></span></div>
         <div><span className="value-icon">◌</span><span><strong>Made to feel like home</strong><small>Personal style, beautifully reflected</small></span></div>
       </section>
 
@@ -91,7 +90,7 @@ export default async function Home() {
             <h2>Find your kind of beautiful.</h2>
             <p className="section-intro">A collection of mirrors and accents that bring your rooms into focus.</p>
           </div>
-          <a className="text-link" href="#seller">Explore the VOOYE edit <span aria-hidden="true">↗</span></a>
+          <a className="text-link" href="#shop">Explore the VOOYE edit <span aria-hidden="true">↗</span></a>
         </div>
 
         {productsUnavailable ? (
@@ -154,13 +153,13 @@ export default async function Home() {
       <section className="section audience-section">
         <div className="grid">
           <div className="audience-card seller-card">
-            <div className="eyebrow">For makers and stores</div>
-            <h2>Have something beautiful to sell?</h2>
+            <div className="eyebrow">The Vooye collection</div>
+            <h2>Find a piece that feels like yours.</h2>
             <p className="muted">
-              Create a seller profile, submit your shop for review and manage
-              your catalogue in one place.
+              Explore full-length mirrors and considered accents selected for
+              a calm, thoughtfully finished home.
             </p>
-            <Link className="button" href="/seller">Become a seller</Link>
+            <Link className="button" href="/#shop">Shop the collection</Link>
           </div>
           <div className="audience-card account-card">
             <div className="eyebrow">Your account</div>
@@ -176,7 +175,7 @@ export default async function Home() {
 
       <footer className="footer">
         <div className="footer-brand"><Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 120, height: 72, objectFit: "contain" }} /></Link><p>Reflections, refined.</p></div>
-        <div className="footer-links"><Link href="/#shop">Shop the collection</Link><Link href="/seller">Seller portal</Link><Link href="/account">Your account</Link><Link href="/cart">Cart</Link></div>
+        <div className="footer-links"><Link href="/#shop">Shop the collection</Link><Link href="/account">Your account</Link><Link href="/cart">Cart</Link></div>
         <div className="footer-bottom"><span>© {new Date().getFullYear()} VOOYE. Thoughtfully considered.</span><span>Mirrors · Home décor · Everyday beauty</span></div>
       </footer>
     </main>
