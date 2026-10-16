@@ -130,6 +130,10 @@ function validateAddress(input: unknown) {
     return { error: "Enter a valid two-letter country code." };
   }
 
+  if (country !== "IN") {
+    return { error: "Vooye currently accepts delivery addresses in India only." };
+  }
+
   const clean: Record<string, string | null> = {};
   for (const field of Object.keys(limits)) {
     if (field === "country_code") continue;
