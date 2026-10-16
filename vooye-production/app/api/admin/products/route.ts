@@ -121,7 +121,7 @@ async function loadImages(db: ReturnType<typeof supabaseRest>, products: Product
   }
   return byId;
 }
-async function attachImages(db: ReturnType<typeof supabaseRest>, productId: string, images: ImageInput[]) {
+async function attachImages(productId: string, images: ImageInput[]) {
   const imagesDb = supabaseRest("product_images");
   if (!images.length) return;
   const response = await requestDb(imagesDb.url, {
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
     const product = rows[0];
     if (!product) return fail("Product was not saved.", 502);
     try {
-      await attachImages(db, product.id, images);
+      await attachImages(product.id, images);
     } catch {
       await requestDb(`${db.url}?id=eq.${encodeURIComponent(product.id)}&status=eq.draft`, {
         method: "DELETE", headers: db.headers,
@@ -305,7 +305,7 @@ export async function PATCH(request: NextRequest) {
       const deleteResponse = await requestDb(`${imagesDb.url}?product_id=eq.${encodeURIComponent(productId)}`, { method: "DELETE", headers: imagesDb.headers });
       if (!deleteResponse.ok) return fail("Product details saved, but old images could not be replaced.", 502);
       try {
-        await attachImages(db, productId, images);
+        await attachImages(productId, images);
       } catch {
         return fail("Product details saved, but image records could not be replaced. Reopen and retry image saving.", 502);
       }
