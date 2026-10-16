@@ -55,7 +55,7 @@ export default function CartContent() {
         </div>
         <div className="empty" style={{ marginTop: 20 }}><p className="muted">Subtotal</p><h2>{money(subtotal)}</h2>
           <p className="muted">Shipping and final availability are calculated at checkout.</p>
-          <button className="button" type="button" disabled title="Checkout is not enabled until secure order creation and Razorpay validation are deployed">Checkout coming soon</button>
+          <Link className="button" href="/checkout">Continue to checkout</Link>
           <p style={{ marginTop: 16 }}><Link href="/#shop">Continue shopping →</Link></p>
         </div>
       </>}
