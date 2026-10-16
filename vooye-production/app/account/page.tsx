@@ -191,8 +191,8 @@ export default function AccountPage() {
                 </article>
                 <article className="panel">
                   <h2>Email and mobile number</h2>
-                  <p><strong>Email:</strong> {user.email || "Not linked"} {user.email_confirmed_at ? "(verified)" : ""}</p>
-                  <p><strong>Mobile:</strong> {user.phone || customer.phone_e164 || "Not linked"} {user.phone_confirmed_at ? "(verified)" : ""}</p>
+                  <p><strong>Email:</strong> {user.email || "Not linked"} {user.emailVerified ? "(verified)" : ""}</p>
+                  <p><strong>Mobile:</strong> {user.phone || customer.phone_e164 || "Not linked"} {user.phoneNumber ? "(verified)" : ""}</p>
                   <h3>{user.phone ? "Update mobile number" : "Add mobile number"}</h3>
                   <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
                     <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
