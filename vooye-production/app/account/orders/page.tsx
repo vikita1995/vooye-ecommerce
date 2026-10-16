@@ -3,8 +3,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
+import { onAuthStateChanged } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 
 type OrderItem = {
   id: string;
@@ -60,39 +60,43 @@ export default function OrdersPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const supabase = createClient();
     let active = true;
-    const applySession = (session: Session | null) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (firebaseUser) => {
+      if (!active) return;
       setAuthReady(true);
-      if (!session) {
+      if (!firebaseUser) {
         setToken("");
         setOrders([]);
         setLoading(false);
         return;
       }
-      void fetch("/api/customer/profile", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        cache: "no-store",
-      }).then(async (response) => {
-        if (!response.ok) throw new Error("Unable to initialize your customer profile.");
-        if (active) setToken(session.access_token);
-      }).catch((cause) => {
+
+      try {
+        const idToken = await firebaseUser.getIdToken();
+        const response = await fetch("/api/customer/profile", {
+          headers: { Authorization: `Bearer ${idToken}` },
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok || !data.customer) {
+          throw new Error(data.error || "Unable to initialize your customer profile.");
+        }
         if (active) {
+          setToken(idToken);
+          setLoading(false);
+        }
+      } catch (cause) {
+        if (active) {
+          setToken("");
           setMessage(cause instanceof Error ? cause.message : "Unable to initialize your customer profile.");
           setLoading(false);
         }
-      });
+      }
+    });
+    return () => {
+      active = false;
+      unsubscribe();
     };
-    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error } = result;
-      if (!active) return;
-      if (error) setMessage("Your session could not be verified. Please sign in again.");
-      applySession(data.session);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      if (active) applySession(session);
-    });
-    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   const loadOrders = useCallback(async () => {
