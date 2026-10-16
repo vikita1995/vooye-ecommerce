@@ -58,5 +58,7 @@ Advisors:
 
 ## Additional hardening after initial audit
 - The Razorpay order-creation API is now fail-closed behind `CHECKOUT_ENABLED=true`; unset/false returns 503 before creating a payment order. The cart UI remains non-checkout-capable.
-- Fixed over-escaped E.164 phone and six-digit PIN/OTP regexes in account/phone/address flows. The browser and API must use a single literal backslash in regex source (e.g. `/^\\+[1-9]\\d{7,14}$/` in Markdown code).
+- Reviewed E.164 phone-number and six-digit Indian PIN/OTP validation across account and address flows; the current source uses the expected regex patterns. CI cannot verify real Firebase SMS delivery or reCAPTCHA/provider configuration.
 - Added a transactional Supabase RPC for seller-status transitions; it writes the status and audit record atomically, with execution denied to `anon` and `authenticated` and granted to `service_role` only.
+- Added an admin-only seller audit history API and connected seller moderation UI. Status transitions are limited (pending→approved/rejected, approved→suspended, suspended→approved), require reasons for rejection/suspension, and are applied with an atomic DB update + audit insert.
+- Hardened Razorpay client verification to fetch payment state from Razorpay, compare internal order ID/amount/currency/status, prevent concurrent callback/webhook double stock decrement, and record late/mismatched/inventory-conflict payments for reconciliation. Webhooks validate amount/currency, track failure/capture events idempotently, and surface exceptions for reconciliation.
