@@ -8,12 +8,12 @@ function isUniqueConstraintError(error: unknown): boolean {
 
 function normalizedEmail(email: string | undefined, uid: string): string {
   const value = email?.trim().toLowerCase();
-  // Prisma currently requires email. Phone-only Supabase accounts receive a stable
+  // Prisma currently requires email. Phone-only Firebase accounts receive a stable
   // internal placeholder until an email is linked; it is never shown as a verified address.
   return value || `phone+${uid}@users.vooye.invalid`;
 }
 
-/** Validate the Supabase bearer token, then resolve the existing Prisma account. */
+/** Validate the Firebase bearer token, then resolve the existing Prisma account. */
 export async function authenticate(request: Request): Promise<User> {
   let identity: VerifiedSupabaseUser;
   try {
@@ -48,7 +48,7 @@ export async function authenticate(request: Request): Promise<User> {
   try {
     return await db.user.create({
       data: {
-        // Legacy schema field name retained for compatibility; the value is now a Supabase Auth UUID.
+        // Legacy Prisma field name retained for compatibility; the value is a Firebase UID.
         firebaseUid: identity.uid,
         email,
         displayName: identity.name?.trim() || null,
@@ -87,33 +87,17 @@ export function requireRole(user: User, roles: UserRole[]): void {
   if (!roles.includes(user.role)) throw new Error("Forbidden");
 }
 
-/** ADMIN_UIDS is a server-side allowlist of Supabase Auth user UUIDs. */
+/** ADMIN_UIDS is a server-side allowlist of Firebase Authentication UIDs. */
 export function isAdminUid(uid: string): boolean {
   return (process.env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(uid);
 }
 
-async function hasAdminProfile(uid: string): Promise<boolean> {
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!baseUrl || !serviceKey) return false;
 
-  const response = await fetch(
-    `${baseUrl}/rest/v1/user_profiles?user_id=eq.${encodeURIComponent(uid)}&select=role&limit=1`,
-    {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    }
-  );
-  if (!response.ok) throw new Error("SUPABASE_CONFIG_MISSING");
-  const rows = (await response.json()) as { role: string }[];
-  return rows[0]?.role === "admin";
-}
 
-/** Require a verified Supabase Auth UUID allowlisted or assigned admin in trusted profile data. */
+/** Admin access is granted only by an explicit Firebase UID allowlist or trusted Prisma role. */
 export async function requireAdmin(request: Request): Promise<User> {
   const user = await authenticate(request);
-  if (!isAdminUid(user.firebaseUid) && !(await hasAdminProfile(user.firebaseUid))) {
+  if (!isAdminUid(user.firebaseUid) && user.role !== "ADMIN") {
     throw new Error("Forbidden");
   }
   return user;
