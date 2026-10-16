@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { FIREBASE_SESSION_COOKIE, verifyFirebaseSessionCookie } from "@/lib/firebase/admin";
+import { isAdminUid } from "@/lib/auth";
 
 const PAGE_PREFIXES = ["/account", "/seller", "/admin"];
 const API_PREFIXES = ["/api/customer", "/api/seller", "/api/admin"];
@@ -8,7 +9,10 @@ function startsWithRoute(pathname: string, prefixes: string[]) {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-
+function noStore(response: NextResponse) {
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -16,8 +20,7 @@ export async function middleware(request: NextRequest) {
   const isProtectedApi = startsWithRoute(pathname, API_PREFIXES);
   if (!isProtectedPage && !isProtectedApi) return NextResponse.next();
 
-  // APIs authenticate Firebase ID tokens in their route handlers. The session
-  // cookie is for browser page navigation only and is HttpOnly.
+  // API handlers enforce their own authorization. Never rely on middleware alone.
   if (isProtectedApi) return NextResponse.next();
 
   const sessionCookie = request.cookies.get(FIREBASE_SESSION_COOKIE)?.value;
@@ -30,23 +33,36 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (!user) {
-    const signInUrl = new URL("/sign-in", request.url);
-    signInUrl.searchParams.set("next", pathname + request.nextUrl.search);
-    const response = NextResponse.redirect(signInUrl);
-    response.headers.set("Cache-Control", "no-store");
-    return response;
+  if (pathname === "/admin/login") {
+    // A valid session is not necessarily an admin; the login page must still
+    // perform its own admin check before redirecting authenticated users.
+    return noStore(NextResponse.next());
   }
 
-  // The API handlers enforce admin authorization from trusted Firebase UID allowlist
-  // or persisted Prisma role. Middleware only protects the authenticated page session.
+  if (!user) {
+    const destination = pathname.startsWith("/admin") ? "/admin/login" : "/sign-in";
+    const signInUrl = new URL(destination, request.url);
+    signInUrl.searchParams.set("next", pathname + request.nextUrl.search);
+    return noStore(NextResponse.redirect(signInUrl));
+  }
 
-  const response = NextResponse.next();
-  response.headers.set("Cache-Control", "private, no-store");
-  return response;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    if (!isAdminUid(user.uid)) {
+      return noStore(NextResponse.redirect(new URL("/admin/login?error=not_admin", request.url)));
+    }
+  }
+
+  return noStore(NextResponse.next());
 }
 
 export const config = {
   runtime: "nodejs",
-  matcher: ["/account/:path*", "/seller/:path*", "/admin/:path*", "/api/customer/:path*", "/api/seller/:path*", "/api/admin/:path*"],
+  matcher: [
+    "/account/:path*",
+    "/seller/:path*",
+    "/admin/:path*",
+    "/api/customer/:path*",
+    "/api/seller/:path*",
+    "/api/admin/:path*",
+  ],
 };
