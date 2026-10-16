@@ -36,7 +36,6 @@ function SignInForm() {
   const [message, setMessage] = useState("");
   const confirmation = useRef<ConfirmationResult | null>(null);
   const recaptcha = useRef<RecaptchaVerifier | null>(null);
-  const recaptchaMounted = useRef(false);
 
   useEffect(() => () => { recaptcha.current?.clear(); }, []);
 
@@ -48,8 +47,15 @@ function SignInForm() {
       cache: "no-store",
     });
     if (!response.ok) {
+      let safeMessage = "Secure session creation failed. Please try again.";
+      try {
+        const body = await response.json() as { error?: unknown };
+        if (typeof body.error === "string" && body.error.length <= 180) safeMessage = body.error;
+      } catch {
+        // Keep the generic message if the server did not return JSON.
+      }
       await signOut(getFirebaseAuth());
-      throw new Error("Sign-in succeeded but the secure session could not be created. Check Firebase Admin configuration on Cloud Run.");
+      throw new Error(`${safeMessage} (HTTP ${response.status})`);
     }
     window.location.assign(nextPath);
   }
@@ -92,7 +98,7 @@ function SignInForm() {
     event.preventDefault();
     await run(async () => {
       const normalized = phone.trim();
-      if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
+      if (!/^\\+[1-9]\\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
       const auth = getFirebaseAuth();
       if (!recaptcha.current) {
         if (!document.getElementById("vooye-phone-recaptcha")) throw new Error("Phone verification is not ready. Reload and try again.");
@@ -107,7 +113,7 @@ function SignInForm() {
   async function verifyPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await run(async () => {
-      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit code.");
+      if (!/^\\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit code.");
       if (!confirmation.current) throw new Error("Request a new verification code first.");
       const result = await confirmation.current.confirm(otp.trim());
       await establishSession(result.user);
@@ -136,7 +142,7 @@ function SignInForm() {
         ) : (
           <form className="stack" onSubmit={otpSent ? verifyPhoneOtp : sendPhoneOtp}>
             <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={otpSent || busy} required /></label>
-            {otpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
+            {otpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
             <div id="vooye-phone-recaptcha" />
             <button type="submit" disabled={busy || (otpSent && otp.length !== 6)}>{busy ? "Please wait…" : otpSent ? "Verify and sign in" : "Send verification code"}</button>
             {otpSent && <button type="button" disabled={busy} onClick={() => { confirmation.current = null; setOtpSent(false); setOtp(""); setMessage(""); recaptcha.current?.clear(); recaptcha.current = null; }}>Use a different number</button>}
