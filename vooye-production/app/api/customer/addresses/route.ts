@@ -119,6 +119,11 @@ function validateAddress(input: unknown) {
     };
   }
 
+  const addressType = String(body.address_type).trim().toLowerCase();
+  if (addressType !== "shipping" && addressType !== "billing") {
+    return { error: "Choose Shipping or Billing for this address." };
+  }
+
   const country = String(body.country_code ?? "IN").trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     return { error: "Enter a valid two-letter country code." };
@@ -136,6 +141,7 @@ function validateAddress(input: unknown) {
     if (!clean[field]) return { error: `Please enter ${field.replaceAll("_", " ")}.` };
   }
 
+  clean.address_type = addressType;
   clean.country_code = country;
   return { data: clean };
 }
