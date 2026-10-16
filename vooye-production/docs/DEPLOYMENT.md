@@ -32,6 +32,8 @@ Then update the deployment workflow to bind each secret using `--set-secrets`. T
 5. Verify backup retention and perform a restore drill.
 
 ## Firebase
+- In Firebase Console → Authentication → Templates → Password reset, set the email action/custom handler URL to `https://vooye.in/account/reset-password`. This page validates Firebase's `mode=resetPassword` and `oobCode`, then calls Firebase's `verifyPasswordResetCode` / `confirmPasswordReset` APIs. Do not use the retired Supabase password-reset flow.
+- Ensure `vooye.in` is an authorized domain for the Firebase project. A working CI build does not verify that Firebase will deliver a production reset email.
 Enable Firebase Authentication providers you intend to support. Add your production domains to Authorized domains. Configure the client app keys and server project ID. Cloud Run should use its attached service identity / Application Default Credentials to verify tokens. Never expose service-account credentials.
 
 ## Checkout feature gate
