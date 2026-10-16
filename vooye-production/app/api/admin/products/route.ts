@@ -6,7 +6,7 @@ import { apiError, supabaseRest } from "@/lib/seller-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ProductStatus = "draft" | "active" | "hidden";
+type ProductStatus = "draft" | "pending_review" | "approved" | "rejected" | "archived";
 
 type Product = {
   id: string;
@@ -74,9 +74,9 @@ export async function GET(request: NextRequest) {
     const status =
       request.nextUrl.searchParams.get("status") ?? "draft";
 
-    if (!["draft", "active", "hidden", "all"].includes(status)) {
+    if (!["draft", "pending_review", "approved", "rejected", "archived", "all"].includes(status)) {
       return apiError(
-        "Status must be draft, active, hidden, or all.",
+        "Status must be draft, pending_review, approved, rejected, archived, or all.",
         400
       );
     }
@@ -158,11 +158,13 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (
-      nextStatus !== "active" &&
-      nextStatus !== "hidden"
+      nextStatus !== "approved" &&
+      nextStatus !== "rejected" &&
+      nextStatus !== "archived" &&
+      nextStatus !== "draft"
     ) {
       return apiError(
-        "Status must be active or hidden.",
+        "Status must be approved, rejected, archived, or draft.",
         400
       );
     }
@@ -194,13 +196,12 @@ export async function PATCH(request: NextRequest) {
       return apiError("Product not found.", 404);
     }
 
-    const allowedTransitions: Record<
-      ProductStatus,
-      ProductStatus[]
-    > = {
-      draft: ["active"],
-      active: ["hidden"],
-      hidden: ["active"],
+    const allowedTransitions: Record<ProductStatus, ProductStatus[]> = {
+      draft: ["approved", "rejected", "archived"],
+      pending_review: ["approved", "rejected", "archived"],
+      approved: ["archived"],
+      rejected: ["draft", "archived"],
+      archived: ["approved", "draft"],
     };
 
     if (!allowedTransitions[current.status]?.includes(
