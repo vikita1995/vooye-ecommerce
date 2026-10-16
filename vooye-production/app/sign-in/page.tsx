@@ -68,13 +68,11 @@ function SignInForm() {
   }
 
   async function googleSignIn() {
-    await run(async () => {
-      const { error } = await createClient().auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
-      });
-      if (error) throw error;
-    });
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const query = new URLSearchParams({ next: nextPath });
+    window.location.assign(`/auth/login/google?${query.toString()}`);
   }
 
   async function sendPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
