@@ -6,6 +6,7 @@ import {
   ensureInvoiceForPaidOrder,
   InvoiceConfigurationError,
   InvoiceNotReadyError,
+  trySendInvoiceEmailIfConfigured,
 } from "@/lib/invoices";
 
 export const runtime = "nodejs";
@@ -40,6 +41,12 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const invoice = await ensureInvoiceForPaidOrder(order.id);
+    await trySendInvoiceEmailIfConfigured(invoice, {
+      orderNumber: order.orderNumber,
+      razorpayOrderId: order.razorpayOrderId,
+      razorpayPaymentId: order.razorpayPaymentId,
+      items: order.items,
+    });
     const pdf = buildInvoicePdf(invoice, {
       orderNumber: order.orderNumber,
       razorpayOrderId: order.razorpayOrderId,
