@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { verifyWebhookSignature } from "@/lib/razorpay";
+import { tryIssueInvoiceForPaidOrder } from "@/lib/invoices";
 export const runtime="nodejs";
 export async function POST(request:Request){
  const raw=await request.text();const signature=request.headers.get("x-razorpay-signature")||"";
@@ -21,6 +22,10 @@ export async function POST(request:Request){
      await tx.order.update({where:{id:order.id},data:{status:"PAID",paymentStatus:"CAPTURED",razorpayPaymentId:entity.id}});
      await tx.paymentEvent.create({data:{orderId:order.id,providerEventId:key,eventType:event.event||"unknown",payloadHash:crypto.createHash("sha256").update(raw).digest("hex")}});
     });
+   }
+   if (order) {
+    // Invoice configuration errors must not cause Razorpay retries for a captured payment.
+    await tryIssueInvoiceForPaidOrder(order.id);
    }
   }
   return NextResponse.json({received:true});
