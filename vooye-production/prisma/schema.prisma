@@ -165,6 +165,8 @@ model Invoice {
   totalPaise        Int
   razorpayOrderId   String?
   razorpayPaymentId String?
+  emailSentAt       DateTime?
+  emailProviderId   String?
   createdAt         DateTime @default(now())
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
