@@ -13,16 +13,38 @@ function adminAuth() {
   return getAuth(app);
 }
 
+function safeErrorCode(error: unknown): string {
+  if (!error || typeof error !== "object") return "UNKNOWN";
+  const candidate = error as { code?: unknown; name?: unknown };
+  const code = typeof candidate.code === "string" ? candidate.code : "";
+  const name = typeof candidate.name === "string" ? candidate.name : "";
+  // Log only SDK error identifiers, never messages, tokens, request headers, or credentials.
+  return (code || name || "UNKNOWN").replace(/[^a-zA-Z0-9_./-]/g, "").slice(0, 100) || "UNKNOWN";
+}
+
 export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization") ?? "";
-  const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const idToken = authorization.match(/^Bearer\\s+(.+)$/i)?.[1]?.trim();
   if (!idToken || idToken.length > 16_384) {
     return NextResponse.json({ error: "Firebase ID token required." }, { status: 401 });
   }
 
+  let auth;
   try {
-    const auth = adminAuth();
+    auth = adminAuth();
+  } catch (error) {
+    console.error("[auth-session] admin_init_failed", { code: safeErrorCode(error) });
+    return NextResponse.json({ error: "Unable to create a secure session." }, { status: 503 });
+  }
+
+  try {
     await auth.verifyIdToken(idToken, true);
+  } catch (error) {
+    console.error("[auth-session] id_token_verification_failed", { code: safeErrorCode(error) });
+    return NextResponse.json({ error: "Unable to verify sign-in. Please try again." }, { status: 401 });
+  }
+
+  try {
     const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: FIREBASE_SESSION_MAX_AGE_MS });
     const response = NextResponse.json({ ok: true });
     response.cookies.set(FIREBASE_SESSION_COOKIE, sessionCookie, {
@@ -34,8 +56,9 @@ export async function POST(request: NextRequest) {
     });
     response.headers.set("Cache-Control", "no-store");
     return response;
-  } catch {
-    return NextResponse.json({ error: "Unable to create a secure session." }, { status: 401 });
+  } catch (error) {
+    console.error("[auth-session] session_cookie_creation_failed", { code: safeErrorCode(error) });
+    return NextResponse.json({ error: "Unable to create a secure session." }, { status: 503 });
   }
 }
 
