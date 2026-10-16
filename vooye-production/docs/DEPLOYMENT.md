@@ -34,6 +34,11 @@ Then update the deployment workflow to bind each secret using `--set-secrets`. T
 ## Firebase
 Enable Firebase Authentication providers you intend to support. Add your production domains to Authorized domains. Configure the client app keys and server project ID. Cloud Run should use its attached service identity / Application Default Credentials to verify tokens. Never expose service-account credentials.
 
+## Checkout feature gate
+- `CHECKOUT_ENABLED` must remain `false` (or unset) until payment verification, inventory reservation/release, shipping, refund/reconciliation, and deployment secret bindings have been tested.
+- The order API returns HTTP 503 unless `CHECKOUT_ENABLED=true` is explicitly set in the Cloud Run runtime environment. Do not enable it only to make the button appear.
+- Use Razorpay test mode with a non-production checkout deployment first. Live keys should be enabled only after the full go-live checklist passes.
+
 ## Razorpay
 - Start in test mode and use test keys.
 - Configure webhook URL: `https://YOUR_DOMAIN/api/payments/razorpay/webhook`.
