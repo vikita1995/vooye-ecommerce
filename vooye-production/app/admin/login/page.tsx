@@ -51,7 +51,10 @@ export default function AdminLoginPage() {
       }
 
       // Do not allow the public customer registration or login to grant admin access.
-      const check = await fetch("/api/admin/access", { cache: "no-store" });
+      const check = await fetch("/api/admin/access", {
+        headers: { Authorization: `Bearer ${idToken}` },
+        cache: "no-store",
+      });
       if (!check.ok) {
         await fetch("/api/auth/session", { method: "DELETE", cache: "no-store" });
         await signOut(auth);
