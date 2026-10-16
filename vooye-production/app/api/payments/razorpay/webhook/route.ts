@@ -95,6 +95,30 @@ export async function POST(request: Request) {
           },
           data: { status: "CANCELLED", paymentStatus: "FAILED" },
         });
+        if (claimed.count === 1) {
+          const reservation = await tx.paymentEvent.findUnique({
+            where: { providerEventId: "inventory_reserved:" + order.id },
+          });
+          const releaseKey = "inventory_released:" + order.id;
+          const released = await tx.paymentEvent.findUnique({ where: { providerEventId: releaseKey } });
+          if (reservation && !released) {
+            const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
+            for (const item of items) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: item.quantity } },
+              });
+            }
+            await tx.paymentEvent.create({
+              data: {
+                orderId: order.id,
+                providerEventId: releaseKey,
+                eventType: "inventory.released.payment_failed",
+                payloadHash: hash(raw),
+              },
+            });
+          }
+        }
         await tx.paymentEvent.create({
           data: {
             orderId: order.id,
@@ -124,6 +148,15 @@ export async function POST(request: Request) {
     if (order.status === "PAID" && order.paymentStatus === "CAPTURED" && order.razorpayPaymentId === entity.id) {
       await recordEvent(order.id, eventKey, "payment.captured_duplicate_after_confirmation", raw);
       return response({ received: true, duplicate: true });
+    }
+
+    const reservation = await db.paymentEvent.findUnique({
+      where: { providerEventId: "inventory_reserved:" + order.id },
+    });
+    if (!reservation) {
+      await recordEvent(order.id, eventKey, "payment.captured_inventory_reservation_missing", raw);
+      console.error("Captured payment has no reservation; support reconciliation required", { orderId: order.id });
+      return response({ received: true, reconciliationRequired: true });
     }
 
     if (
@@ -169,14 +202,7 @@ export async function POST(request: Request) {
           return samePaymentAlreadyCaptured ? "duplicate" as const : "reconciliation" as const;
         }
 
-        const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
-        for (const item of items) {
-          const changed = await tx.product.updateMany({
-            where: { id: item.productId, stock: { gte: item.quantity }, status: "ACTIVE" },
-            data: { stock: { decrement: item.quantity } },
-          });
-          if (changed.count !== 1) throw new Error("INVENTORY_CONFLICT");
-        }
+        // Stock was reserved atomically before the Razorpay order was created.
 
         await tx.paymentEvent.create({
           data: { orderId: order.id, providerEventId: eventKey, eventType: "payment.captured", payloadHash: hash(raw) },
@@ -193,11 +219,7 @@ export async function POST(request: Request) {
       if (isUniqueConstraintError(cause)) {
         return response({ received: true, duplicate: true });
       }
-      if (cause instanceof Error && cause.message === "INVENTORY_CONFLICT") {
-        await recordEvent(order.id, eventKey, "payment.captured_inventory_conflict", raw);
-        console.error("Captured Razorpay payment has inventory conflict", { orderId: order.id });
-        return response({ received: true, reconciliationRequired: true });
-      }
+
       throw cause;
     }
   } catch (cause) {
