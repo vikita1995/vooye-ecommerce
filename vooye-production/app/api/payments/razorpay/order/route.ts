@@ -15,12 +15,12 @@ const bodySchema = z.object({
   })).min(1).max(30),
   shipping: z.object({
     name: z.string().trim().min(2).max(100),
-    phone: z.string().trim().regex(/^\\+[1-9]\\d{7,14}$/, "Enter a phone number with country code."),
+    phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/, "Enter a phone number with country code."),
     address1: z.string().trim().min(4).max(200),
     address2: z.string().trim().max(200).optional(),
     city: z.string().trim().min(2).max(80),
     state: z.string().trim().min(2).max(80),
-    postalCode: z.string().trim().regex(/^\\d{6}$/, "Enter a valid 6-digit Indian PIN code."),
+    postalCode: z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit Indian PIN code."),
   }),
 });
 
@@ -29,6 +29,10 @@ function fail(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  if (process.env.CHECKOUT_ENABLED !== "true") {
+    return fail("Checkout is temporarily unavailable while payment and inventory safety checks are being finalized.", 503);
+  }
+
   try {
     const user = await authenticate(request);
 
