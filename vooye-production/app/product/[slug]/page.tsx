@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import AddToCartButton from "@/components/add-to-cart";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -127,9 +128,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
             Checkout is available only when the payment flow is enabled.
           </div>
 
-          <Link className="button" href="/cart">
-            Go to cart
-          </Link>
+          <AddToCartButton item={{
+            productId: product.id,
+            slug: product.slug,
+            name: product.name,
+            pricePaise: product.pricePaise,
+            imageUrl: primaryImage,
+          }} />
+          <p style={{ marginTop: 12 }}><Link href="/cart">View cart →</Link></p>
           <p className="muted">
             <Link href="/#shop">← Back to the collection</Link>
           </p>
