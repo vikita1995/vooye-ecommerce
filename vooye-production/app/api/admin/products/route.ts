@@ -270,8 +270,9 @@ export async function PATCH(request: NextRequest) {
     }
     let images: ImageInput[] | undefined;
     if ("images" in input) {
-      images = parseImages(input.images);
-      if (!images) return fail("Invalid product images.", 400);
+      const parsedImages = parseImages(input.images);
+      if (parsedImages === null) return fail("Invalid product images.", 400);
+      images = parsedImages;
     }
     const requestedStatus = input.status;
     if (requestedStatus !== undefined && !["draft", "approved", "rejected", "archived"].includes(String(requestedStatus))) {
