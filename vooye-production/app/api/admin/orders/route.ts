@@ -1,221 +1,126 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { apiError, supabaseRest } from "@/lib/seller-server";
+import { db } from "@/lib/db";
+import { OrderStatus } from "@/generated/prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Product = {
-  id: string;
-  seller_uid: string;
-  slug: string;
-  name: string;
-  category: string;
-  description: string;
-  dimensions: string | null;
-  price_paise: number;
-  stock: number;
-  status: string;
-  created_at: string;
-  updated_at: string;
-};
+const allowedStatuses = new Set<OrderStatus>([
+  "PENDING_PAYMENT",
+  "PAID",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+  "REFUND_PENDING",
+  "REFUNDED",
+]);
 
-const PRODUCT_FIELDS =
-  "id,seller_uid,slug,name,category,description,dimensions,price_paise,stock,status,created_at,updated_at";
-
-function handleAdminError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-
-  if (
-    message === "Authentication required" ||
-    message === "Authentication invalid or expired" ||
-    message === "Verified account email required"
-  ) {
-    return apiError("Authentication required. Please sign in again.", 401);
-  }
-
-  if (message === "Forbidden") {
-    return apiError("Administrator access required.", 403);
-  }
-
-  if (message === "SUPABASE_CONFIG_MISSING") {
-    return apiError("Product service is not configured.", 500);
-  }
-
-  console.error(
-    "Admin product moderation API error:",
-    message || "Unknown error"
-  );
-
-  return apiError("The request could not be completed.", 500);
+function fail(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-/**
- * GET /api/admin/products
- * GET /api/admin/products?status=draft
- * GET /api/admin/products?status=all
- *
- * Lists products for administrator moderation.
- * Defaults to draft products.
- */
+function handleError(cause: unknown) {
+  const code = cause instanceof Error ? cause.message : "";
+  if (code === "Authentication required" || code === "Authentication invalid or expired" || code === "AUTH_REQUIRED" || code === "AUTH_INVALID") {
+    return fail("Administrator sign-in is required.", 401);
+  }
+  if (code === "Forbidden") return fail("Administrator access required.", 403);
+  console.error("Admin orders API failed:", code || "Unknown error");
+  return fail("Unable to process the order request.", 500);
+}
+
+/** GET /api/admin/orders?status=PAID — list orders from the same Prisma store used by checkout. */
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
-
-    const requestedStatus =
-      request.nextUrl.searchParams.get("status") ?? "draft";
-
-    const allowedStatuses = new Set([
-      "draft",
-      "active",
-      "hidden",
-      "all",
-    ]);
-
-    if (!allowedStatuses.has(requestedStatus)) {
-      return apiError(
-        "Status must be draft, active, hidden, or all.",
-        400
-      );
+    const statusParam = request.nextUrl.searchParams.get("status");
+    if (statusParam && statusParam !== "all" && !allowedStatuses.has(statusParam as OrderStatus)) {
+      return fail("Invalid order status filter.", 400);
     }
-
-    const db = supabaseRest("products");
-
-    const statusFilter =
-      requestedStatus === "all"
-        ? ""
-        : `&status=eq.${encodeURIComponent(requestedStatus)}`;
-
-    const response = await fetch(
-      `${db.url}?select=${PRODUCT_FIELDS}${statusFilter}&order=created_at.desc&limit=100`,
-      {
-        headers: db.headers,
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-
-    if (!response.ok) {
-      console.error(
-        "Admin product lookup failed:",
-        response.status
-      );
-
-      return apiError("Unable to load products.", 502);
-    }
-
-    const products = (await response.json()) as Product[];
-
-    return NextResponse.json(
-      { products },
-      { headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (error) {
-    return handleAdminError(error);
+    const orders = await db.order.findMany({
+      where: statusParam && statusParam !== "all" ? { status: statusParam as OrderStatus } : undefined,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        user: { select: { email: true, displayName: true } },
+        items: { select: { id: true, productName: true, quantity: true, unitPricePaise: true, lineTotalPaise: true } },
+      },
+    });
+    return NextResponse.json({
+      orders: orders.map((order) => ({
+        id: order.id,
+        order_number: order.orderNumber,
+        customer_email: order.user.email,
+        customer_name: order.shippingName || order.user.displayName,
+        status: order.status,
+        payment_status: order.paymentStatus,
+        currency: order.currency,
+        subtotal: order.subtotalPaise / 100,
+        shipping_amount: order.shippingPaise / 100,
+        total_amount: order.totalPaise / 100,
+        created_at: order.createdAt.toISOString(),
+        items: order.items.map((item) => ({
+          id: item.id,
+          product_name: item.productName,
+          quantity: item.quantity,
+          unit_price: item.unitPricePaise / 100,
+          line_total: item.lineTotalPaise / 100,
+        })),
+      })),
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (cause) {
+    return handleError(cause);
   }
 }
 
 /**
- * PATCH /api/admin/products
- *
- * Body:
- * {
- *   "product_id": "product-id",
- *   "status": "active"
- * }
- *
- * Supported moderation actions:
- * - active: approve or make a product visible
- * - hidden: hide a product from customers
- *
- * Only the status field can be changed through this endpoint.
+ * PATCH /api/admin/orders — only allow fulfilment transitions after payment.
+ * This endpoint cannot mark orders paid/captured; that is reserved for the
+ * verified Razorpay callback/webhook.
  */
 export async function PATCH(request: NextRequest) {
   try {
     await requireAdmin(request);
-
     let body: unknown;
-
     try {
       body = await request.json();
     } catch {
-      return apiError("Invalid request body.", 400);
+      return fail("Invalid request body.", 400);
     }
-
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      Array.isArray(body)
-    ) {
-      return apiError("Invalid moderation details.", 400);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return fail("Invalid order update.", 400);
     }
-
     const input = body as Record<string, unknown>;
-    const allowedFields = new Set(["product_id", "status"]);
-
-    if (Object.keys(input).some((field) => !allowedFields.has(field))) {
-      return apiError(
-        "Moderation request contains unsupported fields.",
-        400
-      );
+    if (Object.keys(input).some((key) => !["order_id", "status"].includes(key))) {
+      return fail("Unsupported order update field.", 400);
+    }
+    const orderId = typeof input.order_id === "string" ? input.order_id.trim() : "";
+    const nextStatus = input.status;
+    if (!orderId || orderId.length > 128) return fail("A valid order ID is required.", 400);
+    if (nextStatus !== "PROCESSING" && nextStatus !== "SHIPPED" && nextStatus !== "DELIVERED" && nextStatus !== "CANCELLED" && nextStatus !== "REFUND_PENDING") {
+      return fail("This order status cannot be set manually.", 400);
     }
 
-    const productId =
-      typeof input.product_id === "string"
-        ? input.product_id.trim()
-        : "";
-
-    const status = input.status;
-
-    if (!productId || productId.length > 128) {
-      return apiError("A valid product ID is required.", 400);
+    const current = await db.order.findUnique({ where: { id: orderId } });
+    if (!current) return fail("Order not found.", 404);
+    const transitions: Partial<Record<OrderStatus, OrderStatus[]>> = {
+      PAID: ["PROCESSING", "CANCELLED", "REFUND_PENDING"],
+      PROCESSING: ["SHIPPED", "CANCELLED", "REFUND_PENDING"],
+      SHIPPED: ["DELIVERED", "REFUND_PENDING"],
+    };
+    if (!transitions[current.status]?.includes(nextStatus as OrderStatus)) {
+      return fail(`Cannot change order status from ${current.status} to ${String(nextStatus)}.`, 409);
     }
-
-    if (status !== "active" && status !== "hidden") {
-      return apiError(
-        "Status must be active or hidden.",
-        400
-      );
-    }
-
-    const db = supabaseRest("products");
-
-    const response = await fetch(
-      `${db.url}?id=eq.${encodeURIComponent(productId)}&select=${PRODUCT_FIELDS}`,
-      {
-        method: "PATCH",
-        headers: {
-          ...db.headers,
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({ status }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-
-    if (!response.ok) {
-      console.error(
-        "Admin product moderation update failed:",
-        response.status
-      );
-
-      return apiError("Unable to update product status.", 502);
-    }
-
-    const products = (await response.json()) as Product[];
-    const product = products[0];
-
-    if (!product) {
-      return apiError("Product not found.", 404);
-    }
-
-    return NextResponse.json(
-      { product },
-      { headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (error) {
-    return handleAdminError(error);
+    const updated = await db.order.updateMany({
+      where: { id: orderId, status: current.status, paymentStatus: "CAPTURED" },
+      data: { status: nextStatus as OrderStatus },
+    });
+    if (updated.count !== 1) return fail("Order status changed concurrently or payment is not captured.", 409);
+    const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true, orderNumber: true, status: true, paymentStatus: true } });
+    return NextResponse.json({ order }, { headers: { "Cache-Control": "no-store" } });
+  } catch (cause) {
+    return handleError(cause);
   }
 }
