@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { getPublishedProducts } from "@/lib/catalog";
 import ProfileLink from "@/components/profile-link";
 
 export const dynamic = "force-dynamic";
@@ -25,25 +25,8 @@ export default async function Home() {
   let productsUnavailable = false;
 
   try {
-    products = await db.product.findMany({
-      where: {
-        status: "ACTIVE",
-        stock: { gt: 0 },
-        seller: { status: "APPROVED" },
-      },
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        category: true,
-        imageUrl: true,
-        pricePaise: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 60,
-    });
+    products = await getPublishedProducts();
   } catch (error) {
-    // Keep the rest of the storefront available if the catalogue database is down.
     console.error(
       "Homepage product query failed:",
       error instanceof Error ? error.message : "Unknown error"
