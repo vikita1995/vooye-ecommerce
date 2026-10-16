@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { onAuthStateChanged, PhoneAuthProvider, RecaptchaVerifier, signOut as firebaseSignOut, updatePhoneNumber, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import { createClient } from "@/lib/supabase/client";
 
@@ -29,6 +29,8 @@ export default function AccountPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneVerificationId, setPhoneVerificationId] = useState("");
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,12 +113,27 @@ export default function AccountPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage("");
     try {
-      if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) throw new Error("Enter a phone number with country code, e.g. +919876543210.");
-      const { error } = await createClient().auth.updateUser({ phone: phone.trim() });
-      if (error) throw error;
+      const normalizedPhone = phone.trim();
+      if (!/^\\+[1-9]\\d{7,14}$/.test(normalizedPhone)) {
+        throw new Error("Enter a phone number with country code, e.g. +919876543210.");
+      }
+      const auth = getFirebaseAuth();
+      if (!auth.currentUser) throw new Error("Please sign in again before verifying your mobile number.");
+
+      // Firebase Auth is the source of truth for sign-in and phone verification.
+      // Do not use Supabase Auth OTP here because the app now authenticates with Firebase.
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = new RecaptchaVerifier(auth, "phone-recaptcha-container", {
+        size: "invisible",
+      });
+      const provider = new PhoneAuthProvider(auth);
+      const verificationId = await provider.verifyPhoneNumber(normalizedPhone, recaptchaVerifier.current);
+      setPhoneVerificationId(verificationId);
       setPhoneOtpSent(true);
       setMessage("Verification code sent to your mobile number.");
     } catch (cause) {
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = null;
       setError(cause instanceof Error ? cause.message : "Unable to send verification code.");
     } finally { setBusy(false); }
   }
@@ -125,21 +142,25 @@ export default function AccountPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage("");
     try {
-      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit verification code.");
-      const { data, error } = await createClient().auth.verifyOtp({
-        phone: phone.trim(), token: otp.trim(), type: "phone_change",
-      });
-      if (error) throw error;
-      const token = data.session?.access_token ?? await getAccessToken();
+      if (!/^\\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit verification code.");
+      if (!phoneVerificationId) throw new Error("Request a new verification code first.");
+      const currentUser = getFirebaseAuth().currentUser;
+      if (!currentUser) throw new Error("Please sign in again before verifying your mobile number.");
+
+      const credential = PhoneAuthProvider.credential(phoneVerificationId, otp.trim());
+      await updatePhoneNumber(currentUser, credential);
+      const token = await currentUser.getIdToken(true);
       const response = await fetch("/api/customer/phone", {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: data.user?.phone ?? phone.trim() }),
+        body: JSON.stringify({ phone_number: currentUser.phoneNumber }),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || "Verified number could not be saved to the profile.");
-      setPhone(""); setOtp(""); setPhoneOtpSent(false);
-      setMessage("Your mobile number has been verified.");
+      if (!response.ok || !result.success) throw new Error(result.error || "Verified number could not be saved to your profile.");
+      setPhone(""); setOtp(""); setPhoneOtpSent(false); setPhoneVerificationId("");
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = null;
+      setMessage("Your mobile number has been verified and saved.");
       await loadProfile(token);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to verify the mobile number.");
@@ -194,11 +215,12 @@ export default function AccountPage() {
                   <p><strong>Email:</strong> {user.email || "Not linked"} {user.emailVerified ? "(verified)" : ""}</p>
                   <p><strong>Mobile:</strong> {user.phoneNumber || customer.phone_e164 || "Not linked"} {user.phoneNumber ? "(verified)" : ""}</p>
                   <h3>{user.phoneNumber ? "Update mobile number" : "Add mobile number"}</h3>
+                  <div id="phone-recaptcha-container" />
                   <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
                     <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
                     {phoneOtpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
                     <button type="submit" disabled={busy || (phoneOtpSent && otp.length !== 6)}>{busy ? "Please wait…" : phoneOtpSent ? "Verify and save number" : "Send verification code"}</button>
-                    {phoneOtpSent && <button type="button" disabled={busy} onClick={() => { setPhoneOtpSent(false); setOtp(""); setMessage(""); }}>Use a different number</button>}
+                    {phoneOtpSent && <button type="button" disabled={busy} onClick={() => { setPhoneOtpSent(false); setOtp(""); setPhoneVerificationId(""); setMessage(""); recaptchaVerifier.current?.clear(); recaptchaVerifier.current = null; }}>Use a different number</button>}
                   </form>
                 </article>
                 <div className="grid">
