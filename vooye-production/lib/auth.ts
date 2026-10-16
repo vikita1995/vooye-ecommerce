@@ -1,4 +1,5 @@
 import { Prisma, type User, type UserRole } from "@/generated/prisma/client";
+import { isAdminUid } from "@/lib/admin-allowlist";
 import { db } from "@/lib/db";
 import { authenticateSupabaseRequest, type VerifiedSupabaseUser } from "@/lib/supabase/verify-token";
 
@@ -86,13 +87,6 @@ export async function syncUserProfile(user: User, identity: VerifiedSupabaseUser
 export function requireRole(user: User, roles: UserRole[]): void {
   if (!roles.includes(user.role)) throw new Error("Forbidden");
 }
-
-/** ADMIN_UIDS is a server-side allowlist of Firebase Authentication UIDs. */
-export function isAdminUid(uid: string): boolean {
-  return (process.env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean).includes(uid);
-}
-
-
 
 /** Admin access is granted only by an explicit Firebase UID allowlist or trusted Prisma role. */
 export async function requireAdmin(request: Request): Promise<User> {
