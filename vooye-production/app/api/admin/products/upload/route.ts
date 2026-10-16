@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     const extension = MIME_EXTENSIONS[raw.type];
     const safeBase = raw.name.replace(/\.[^.]+$/, "").normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "product-image";
-    const storagePath = `products/${user.firebaseUid}/${safeBase}-${crypto.randomUUID()}. ${extension}`.replace(". ", ".");
+    const storagePath = `products/${user.firebaseUid}/${safeBase}-${crypto.randomUUID()}.${extension}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || "vooye-products";
     const upload = await fetch(`${url}/storage/v1/object/${bucket}/${storagePath.split("/").map(encodeURIComponent).join("/")}`, {
       method: "POST",
