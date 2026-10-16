@@ -133,6 +133,11 @@ async function validateBody(request: NextRequest) {
     return { error: "Enter a valid two-letter country code." };
   }
 
+  const postalCode = String(body.postal_code).trim();
+  if (country === "IN" ? !/^\d{6}$/.test(postalCode) : !/^[A-Za-z0-9 -]{3,20}$/.test(postalCode)) {
+    return { error: country === "IN" ? "Enter a valid 6-digit Indian PIN code." : "Please enter a valid postal code." };
+  }
+
   const data: Record<string, string | null> = {};
   for (const field of Object.keys(maxLengths)) {
     if (field === "country_code") continue;
