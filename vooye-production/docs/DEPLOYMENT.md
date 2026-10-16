@@ -36,6 +36,12 @@ Then update the deployment workflow to bind each secret using `--set-secrets`. T
 - Ensure `vooye.in` is an authorized domain for the Firebase project. A working CI build does not verify that Firebase will deliver a production reset email.
 Enable Firebase Authentication providers you intend to support. Add your production domains to Authorized domains. Configure the client app keys and server project ID. Cloud Run should use its attached service identity / Application Default Credentials to verify tokens. Never expose service-account credentials.
 
+## Inventory reservation and order expiry
+- The checkout API requires a non-empty `SERVICEABLE_PIN_CODES` allowlist of six-digit Indian PIN codes. Leave this unset until the shipping partner has confirmed serviceability.
+- Orders reserve stock inside the same Prisma transaction that creates the pending order and records an inventory-reservation event.
+- Set `CRON_SECRET` in Secret Manager and configure Cloud Scheduler to POST to `/api/cron/expire-pending-orders` with `Authorization: Bearer <secret>` at least every 5 minutes. The endpoint expires pending payment orders and releases only reservations created by this implementation. Do not put the secret in source control.
+- Late captures after expiry and inventory/payment mismatches require a support/refund reconciliation workflow; do not enable live payments until that workflow is tested.
+
 ## Checkout feature gate
 - `CHECKOUT_ENABLED` must remain `false` (or unset) until payment verification, inventory reservation/release, shipping, refund/reconciliation, and deployment secret bindings have been tested.
 - The order API returns HTTP 503 unless `CHECKOUT_ENABLED=true` is explicitly set in the Cloud Run runtime environment. Do not enable it only to make the button appear.
