@@ -29,6 +29,8 @@ type Order = {
   created_at: string;
   customer_note: string | null;
   items: OrderItem[];
+  payment_status: string;
+  invoice_order_id: string | null;
 };
 
 function money(amount: number | string, currency: string) {
@@ -58,6 +60,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [invoiceError, setInvoiceError] = useState("");
+  const [invoiceBusyOrderId, setInvoiceBusyOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -106,7 +110,7 @@ export default function OrdersPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/customer/orders", {
+      const response = await fetch("/api/customer/commerce-orders", {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
@@ -129,6 +133,36 @@ export default function OrdersPage() {
   useEffect(() => {
     if (token) void loadOrders();
   }, [token, loadOrders]);
+  async function downloadInvoice(order: Order) {
+    if (!token || !order.invoice_order_id) return;
+    setInvoiceBusyOrderId(order.id);
+    setInvoiceError("");
+    try {
+      const response = await fetch(`/api/customer/orders/${encodeURIComponent(order.invoice_order_id)}/invoice`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || "Unable to download this invoice.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `invoice-${order.order_number}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (cause) {
+      setInvoiceError(cause instanceof Error ? cause.message : "Unable to download this invoice.");
+    } finally {
+      setInvoiceBusyOrderId(null);
+    }
+  }
+
 
   if (!authReady || (loading && !token)) {
     return (
@@ -153,8 +187,9 @@ export default function OrdersPage() {
         <div className="eyebrow">Your account</div>
         <h1>Order history</h1>
         <p className="muted">
-          View your purchases and the items included in each order.
+          View your purchases, payment status, and available invoices.
         </p>
+        {invoiceError && <p role="alert" className="notice">{invoiceError}</p>}
 
         {!token ? (
           <div className="empty">
@@ -196,7 +231,14 @@ export default function OrdersPage() {
                       )}
                     </p>
                   </div>
-                  <p><strong>{readableStatus(order.status)}</strong></p>
+                  <div style={{ display: "grid", justifyItems: "end", gap: 8 }}>
+                    <p><strong>{readableStatus(order.status)}</strong> · {readableStatus(order.payment_status)}</p>
+                    {order.invoice_order_id && (
+                      <button type="button" disabled={invoiceBusyOrderId === order.id} onClick={() => void downloadInvoice(order)}>
+                        {invoiceBusyOrderId === order.id ? "Preparing invoice…" : "Download invoice PDF"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ marginTop: 16 }}>
