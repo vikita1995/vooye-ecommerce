@@ -14,7 +14,7 @@ import {
   signOut,
   type ConfirmationResult,
 } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase/client";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 import { normalizeE164Phone } from "@/lib/validation";
 
 function safeNextPath(value: string | null) {
@@ -36,6 +36,13 @@ function SignInForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const errorCode = searchParams.get("error");
+    if (errorCode === "legacy_supabase_auth_disabled") {
+      setMessage("This older sign-in link is no longer supported. Continue using the Firebase sign-in options on this page.");
+    }
+  }, [searchParams]);
   const confirmation = useRef<ConfirmationResult | null>(null);
   const recaptcha = useRef<RecaptchaVerifier | null>(null);
 
