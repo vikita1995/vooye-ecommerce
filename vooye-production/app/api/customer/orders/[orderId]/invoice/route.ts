@@ -55,7 +55,9 @@ export async function GET(request: Request, context: RouteContext) {
     });
     const filename = `${invoice.invoiceNumber.replace(/[^A-Za-z0-9_-]/g, "-")}.pdf`;
 
-    return new NextResponse(pdf, {
+    const responseBody = new ArrayBuffer(pdf.byteLength);
+    new Uint8Array(responseBody).set(pdf);
+    return new NextResponse(responseBody, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
