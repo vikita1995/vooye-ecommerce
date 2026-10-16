@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
+import { isValidIndianPin, normalizeE164Phone } from "@/lib/validation";
 
 type Address = {
   id: string;
@@ -142,10 +143,10 @@ export default function AddressesPage() {
     if (values.address_line1.trim().length < 4) {
       errors.address_line1 = "Enter a complete street address.";
     }
-    if (!/^\+[1-9]\d{7,14}$/.test(values.phone_e164.trim())) {
+    if (!normalizeE164Phone(values.phone_e164)) {
       errors.phone_e164 = "Enter a phone number with country code, e.g. +919876543210.";
     }
-    if (values.country_code === "IN" && !/^\d{6}$/.test(values.postal_code.trim())) {
+    if (values.country_code === "IN" && !isValidIndianPin(values.postal_code)) {
       errors.postal_code = "Enter a valid 6-digit Indian PIN code.";
     }
     if (values.address_type !== "shipping" && values.address_type !== "billing") {
