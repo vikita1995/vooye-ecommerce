@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireFirebaseAdmin } from "@/lib/firebase/require-admin";
 import { apiError } from "@/lib/seller-server";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAdmin(request);
+    const user = await requireFirebaseAdmin(request);
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) return apiError("Image storage is not configured on the server.", 500);
