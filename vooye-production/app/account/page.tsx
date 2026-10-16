@@ -124,7 +124,7 @@ export default function AccountPage() {
       // Do not use Supabase Auth OTP here because the app now authenticates with Firebase.
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = new RecaptchaVerifier(auth, "phone-recaptcha-container", {
-        size: "invisible",
+        size: "normal",
       });
       const provider = new PhoneAuthProvider(auth);
       const verificationId = await provider.verifyPhoneNumber(normalizedPhone, recaptchaVerifier.current);
@@ -149,6 +149,7 @@ export default function AccountPage() {
 
       const credential = PhoneAuthProvider.credential(phoneVerificationId, otp.trim());
       await updatePhoneNumber(currentUser, credential);
+      setUser(currentUser);
       const token = await currentUser.getIdToken(true);
       const response = await fetch("/api/customer/phone", {
         method: "PATCH",
@@ -160,7 +161,8 @@ export default function AccountPage() {
       setPhone(""); setOtp(""); setPhoneOtpSent(false); setPhoneVerificationId("");
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = null;
-      setMessage("Your mobile number has been verified and saved.");
+      setUser(currentUser);
+      setMessage("Your mobile number has been verified and saved to your account.");
       await loadProfile(token);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to verify the mobile number.");
@@ -213,7 +215,7 @@ export default function AccountPage() {
                 <article className="panel">
                   <h2>Email and mobile number</h2>
                   <p><strong>Email:</strong> {user.email || "Not linked"} {user.emailVerified ? "(verified)" : ""}</p>
-                  <p><strong>Mobile:</strong> {user.phoneNumber || customer.phone_e164 || "Not linked"} {user.phoneNumber ? "(verified)" : ""}</p>
+                  <p><strong>Mobile:</strong> {customer.phone_e164 || user.phoneNumber || "Not linked"} {customer.phone_verified_at ? "(verified)" : ""}</p>
                   <h3>{user.phoneNumber ? "Update mobile number" : "Add mobile number"}</h3>
                   <div id="phone-recaptcha-container" />
                   <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
