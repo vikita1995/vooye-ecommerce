@@ -6,7 +6,7 @@ on:
       - "vooye-production/**"
       - ".github/workflows/ci.yml"
   push:
-    branches: [main]
+    branches: [main, upgrade/prisma-7]
     paths:
       - "vooye-production/**"
       - ".github/workflows/ci.yml"
