@@ -16,7 +16,16 @@ export function createClient(): SupabaseClient {
     );
   }
 
-  const client = createBrowserClient(url, key);
+  const client = createBrowserClient(url, key, {
+    cookieOptions: {
+      // Share PKCE verifier/session cookies across vooye.in subdomains.
+      ...(process.env.NODE_ENV === "production"
+        ? { domain: ".vooye.in", secure: true }
+        : {}),
+      sameSite: "lax",
+      path: "/",
+    },
+  });
   browserClient = client;
   return client;
 }
