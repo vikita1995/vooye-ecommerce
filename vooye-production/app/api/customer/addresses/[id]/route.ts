@@ -140,6 +140,10 @@ async function validateBody(request: NextRequest) {
     return { error: "Enter a valid two-letter country code." };
   }
 
+  if (country !== "IN") {
+    return { error: "Vooye currently accepts delivery addresses in India only." };
+  }
+
   const postalCode = String(body.postal_code).trim();
   if (!isValidPostalCode(postalCode, country)) {
     return { error: country === "IN" ? "Enter a valid 6-digit Indian PIN code." : "Please enter a valid postal code." };
