@@ -24,7 +24,7 @@ function safeErrorCode(error: unknown): string {
 
 export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization") ?? "";
-  const idToken = authorization.match(/^Bearer\\s+(.+)$/i)?.[1]?.trim();
+  const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!idToken || idToken.length > 16_384) {
     return NextResponse.json({ error: "Firebase ID token required." }, { status: 401 });
   }
