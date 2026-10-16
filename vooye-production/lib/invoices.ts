@@ -231,3 +231,17 @@ export function buildInvoicePdf(invoice: Invoice, order: InvoicePdfOrder): Buffe
   }
   return makePdf(pages.length ? pages : [["VOOYE INVOICE"]]);
 }
+
+/** Invoice errors must not turn a confirmed payment into a failed checkout response. */
+export async function tryIssueInvoiceForPaidOrder(orderId: string): Promise<boolean> {
+  try {
+    await ensureInvoiceForPaidOrder(orderId);
+    return true;
+  } catch (cause) {
+    console.error("Invoice issuance deferred", {
+      orderId,
+      reason: cause instanceof Error ? cause.message : "Unknown error",
+    });
+    return false;
+  }
+}
