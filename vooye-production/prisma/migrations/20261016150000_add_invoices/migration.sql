@@ -30,6 +30,10 @@ CREATE UNIQUE INDEX "Invoice_orderId_key" ON "Invoice"("orderId");
 CREATE INDEX "Invoice_issuedAt_idx" ON "Invoice"("issuedAt");
 
 ALTER TABLE "Invoice"
+ADD COLUMN "emailSentAt" TIMESTAMP(3),
+ADD COLUMN "emailProviderId" TEXT;
+
+ALTER TABLE "Invoice"
 ADD CONSTRAINT "Invoice_orderId_fkey"
 FOREIGN KEY ("orderId") REFERENCES "Order"("id")
 ON DELETE RESTRICT ON UPDATE CASCADE;
