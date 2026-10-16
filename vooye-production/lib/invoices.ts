@@ -70,7 +70,7 @@ export async function ensureInvoiceForPaidOrder(orderId: string): Promise<Invoic
   const prefix = envValue("INVOICE_NUMBER_PREFIX") || "VOO-INV";
   // Deterministic per-order number makes retries idempotent. This is not a sequential GST invoice series.
   const invoiceNumber = `${prefix}-${order.orderNumber}`;
-  const buyerEmail = order.user.email.endsWith(".users.vooye.invalid") ? null : order.user.email;
+  const buyerEmail = order.user.email.endsWith("@users.vooye.invalid") ? null : order.user.email;
   const shippingAddress = [
     order.shippingAddress1,
     order.shippingAddress2,
