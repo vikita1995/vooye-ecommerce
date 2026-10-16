@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authenticate } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { razorpayClient } from "@/lib/razorpay";
+import { isValidIndianPin, normalizeE164Phone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,12 +16,12 @@ const bodySchema = z.object({
   })).min(1).max(30),
   shipping: z.object({
     name: z.string().trim().min(2).max(100),
-    phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/, "Enter a phone number with country code."),
+    phone: z.string().trim().refine((value) => normalizeE164Phone(value) !== null, "Enter a phone number with country code.").transform((value) => normalizeE164Phone(value) as string),
     address1: z.string().trim().min(4).max(200),
     address2: z.string().trim().max(200).optional(),
     city: z.string().trim().min(2).max(80),
     state: z.string().trim().min(2).max(80),
-    postalCode: z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit Indian PIN code."),
+    postalCode: z.string().trim().refine(isValidIndianPin, "Enter a valid 6-digit Indian PIN code."),
   }),
 });
 
