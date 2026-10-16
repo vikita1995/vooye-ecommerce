@@ -64,12 +64,13 @@ export async function GET(request: NextRequest) {
       "pending",
       "approved",
       "rejected",
+      "suspended",
       "all",
     ]);
 
     if (!allowedStatuses.has(requestedStatus)) {
       return apiError(
-        "Status must be pending, approved, rejected, or all.",
+        "Status must be pending, approved, rejected, suspended, or all.",
         400
       );
     }
@@ -124,85 +125,101 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     let body: unknown;
-
     try {
       body = await request.json();
     } catch {
       return apiError("Invalid request body.", 400);
     }
 
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      Array.isArray(body)
-    ) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return apiError("Invalid review details.", 400);
     }
 
     const input = body as Record<string, unknown>;
-    const allowedFields = new Set(["firebase_uid", "status"]);
-
+    const allowedFields = new Set(["firebase_uid", "status", "reason"]);
     if (Object.keys(input).some((field) => !allowedFields.has(field))) {
       return apiError("Review contains unsupported fields.", 400);
     }
 
-    const firebaseUid =
-      typeof input.firebase_uid === "string"
-        ? input.firebase_uid.trim()
-        : "";
-
-    const status = input.status;
+    const firebaseUid = typeof input.firebase_uid === "string" ? input.firebase_uid.trim() : "";
+    const status = typeof input.status === "string" ? input.status : "";
+    const reason = typeof input.reason === "string" ? input.reason.trim() : "";
 
     if (!firebaseUid || firebaseUid.length > 128) {
       return apiError("A valid seller Firebase UID is required.", 400);
     }
-
-    if (status !== "approved" && status !== "rejected") {
-      return apiError("Status must be approved or rejected.", 400);
+    if (!["approved", "rejected", "suspended"].includes(status)) {
+      return apiError("Status must be approved, rejected, or suspended.", 400);
     }
+    if (["rejected", "suspended"].includes(status) && reason.length < 5) {
+      return apiError("Enter a reason of at least 5 characters for rejection or suspension.", 400);
+    }
+    if (reason.length > 1000) return apiError("Review reason must be 1,000 characters or fewer.", 400);
 
-    const db = supabaseRest("seller_profiles");
-
-    const response = await fetch(
-      `${db.url}?firebase_uid=eq.${encodeURIComponent(firebaseUid)}&status=eq.pending&select=${SELLER_FIELDS}`,
-      {
-        method: "PATCH",
-        headers: {
-          ...db.headers,
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({ status }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
+    // The database function locks the seller row, validates the transition,
+    // updates the status and inserts the audit event in a single transaction.
+    const db = supabaseRest("rpc/review_seller_application");
+    const response = await fetch(db.url, {
+      method: "POST",
+      headers: db.headers,
+      body: JSON.stringify({
+        p_seller_firebase_uid: firebaseUid,
+        p_next_status: status,
+        p_reason: reason || null,
+        p_admin_firebase_uid: admin.firebaseUid,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
 
     if (!response.ok) {
-      console.error(
-        "Admin seller application review failed:",
-        response.status
-      );
+      let dbMessage = "";
+      try {
+        const payload = await response.json() as { message?: string; code?: string };
+        dbMessage = payload.message || payload.code || "";
+      } catch {
+        // Do not expose a raw database error or query payload to the browser.
+      }
 
-      return apiError("Unable to update seller application.", 502);
+      if (dbMessage === "SELLER_APPLICATION_NOT_FOUND" || dbMessage.includes("SELLER_APPLICATION_NOT_FOUND")) {
+        return apiError("Seller application not found.", 404);
+      }
+      if (dbMessage === "INVALID_SELLER_STATUS_TRANSITION" || dbMessage.includes("INVALID_SELLER_STATUS_TRANSITION")) {
+        return apiError("That seller status transition is not allowed. Refresh and try again.", 409);
+      }
+      if (dbMessage === "REASON_REQUIRED" || dbMessage.includes("REASON_REQUIRED")) {
+        return apiError("A review reason is required for this status.", 400);
+      }
+      if (["INVALID_SELLER_UID", "INVALID_ADMIN_UID", "INVALID_SELLER_STATUS"].some((code) => dbMessage.includes(code))) {
+        return apiError("Invalid seller review details.", 400);
+      }
+
+      console.error("Atomic seller review RPC failed:", response.status);
+      return apiError("Unable to update seller application and audit history.", 502);
     }
 
-    const applications =
-      (await response.json()) as SellerApplication[];
-
-    const application = applications[0];
-
-    if (!application) {
-      return apiError(
-        "Pending application not found. It may already have been reviewed.",
-        404
-      );
+    const result = await response.json() as {
+      application?: SellerApplication;
+      event?: {
+        id: string;
+        seller_firebase_uid: string;
+        previous_status: string;
+        new_status: string;
+        reason: string | null;
+        admin_firebase_uid: string;
+        created_at: string;
+      };
+    };
+    if (!result.application || !result.event) {
+      console.error("Atomic seller review RPC returned an incomplete result.");
+      return apiError("Seller review result was incomplete.", 502);
     }
 
     return NextResponse.json(
-      { application },
+      { application: result.application, event: result.event },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
