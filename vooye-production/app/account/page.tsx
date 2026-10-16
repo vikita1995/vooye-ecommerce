@@ -114,7 +114,7 @@ export default function AccountPage() {
     setBusy(true); setError(""); setMessage("");
     try {
       const normalizedPhone = phone.trim();
-      if (!/^\\+[1-9]\\d{7,14}$/.test(normalizedPhone)) {
+      if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
         throw new Error("Enter a phone number with country code, e.g. +919876543210.");
       }
       const auth = getFirebaseAuth();
@@ -142,7 +142,7 @@ export default function AccountPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage("");
     try {
-      if (!/^\\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit verification code.");
+      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit verification code.");
       if (!phoneVerificationId) throw new Error("Request a new verification code first.");
       const currentUser = getFirebaseAuth().currentUser;
       if (!currentUser) throw new Error("Please sign in again before verifying your mobile number.");
