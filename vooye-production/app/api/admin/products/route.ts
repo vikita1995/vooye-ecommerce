@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireFirebaseAdmin } from "@/lib/firebase/require-admin";
 import { apiError, supabaseRest } from "@/lib/seller-server";
 
 export const runtime = "nodejs";
@@ -134,7 +134,7 @@ async function attachImages(productId: string, images: ImageInput[]) {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAdmin(request);
+    const user = await requireFirebaseAdmin(request);
     const status = request.nextUrl.searchParams.get("status") ?? "all";
     if (!["draft", "pending_review", "approved", "rejected", "archived", "all"].includes(status)) {
       return fail("Invalid product status filter.", 400);
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAdmin(request);
+    const user = await requireFirebaseAdmin(request);
     let body: unknown;
     try { body = await request.json(); } catch { return fail("Invalid product details.", 400); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return fail("Invalid product details.", 400);
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await requireAdmin(request);
+    const user = await requireFirebaseAdmin(request);
     let body: unknown;
     try { body = await request.json(); } catch { return fail("Invalid update.", 400); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return fail("Invalid product update.", 400);
