@@ -108,11 +108,11 @@ export async function ensureInvoiceForPaidOrder(orderId: string): Promise<Invoic
 type InvoicePdfOrder = Pick<PaidOrder, "orderNumber" | "razorpayOrderId" | "razorpayPaymentId" | "items">;
 
 function ascii(value: string) {
-  return value.normalize("NFKD").replace(/[^\\x20-\\x7E]/g, "?");
+  return value.normalize("NFKD").split("").map((character) => { const code = character.charCodeAt(0); return code >= 32 && code <= 126 ? character : "?"; }).join("");
 }
 
 function wrap(value: string, width = 88): string[] {
-  const normalized = ascii(value).replace(/\\s+/g, " ").trim();
+  const normalized = ascii(value).replace(/\s+/g, " ").trim();
   if (!normalized) return [""];
   const words = normalized.split(" ");
   const lines: string[] = [];
@@ -134,7 +134,13 @@ function formatInr(paise: number) {
 }
 
 function escapePdf(value: string) {
-  return ascii(value).replace(/\\\\/g, "\\\\\\\\").replace(/\\(/g, "\\\\(").replace(/\\)/g, "\\\\)");
+  let result = "";
+  for (const character of ascii(value)) {
+    if (character === "\\") result += "\\\\";
+    else if (character === "(" || character === ")") result += "\\" + character;
+    else result += character;
+  }
+  return result;
 }
 
 function makePdf(pages: string[][]): Buffer {
