@@ -87,6 +87,18 @@ export async function POST(request: Request) {
       return fail("Unable to verify payment with Razorpay right now. Please retry shortly.", 503);
     }
 
+    const reservation = await db.paymentEvent.findUnique({
+      where: { providerEventId: "inventory_reserved:" + order.id },
+    });
+    if (!reservation) {
+      await recordReconciliationEvent(order.id, value.razorpayPaymentId, "client.verify.inventory_reservation_missing", {
+        internalOrderId: order.id,
+        providerOrderId: value.razorpayOrderId,
+        providerPaymentId: value.razorpayPaymentId,
+      });
+      return fail("This order has no inventory reservation. Support reconciliation is required; do not pay again.", 409);
+    }
+
     if (
       providerPayment.id !== value.razorpayPaymentId ||
       providerPayment.order_id !== order.razorpayOrderId ||
@@ -164,15 +176,7 @@ export async function POST(request: Request) {
           return { state: "reconciliation_required" as const };
         }
 
-        const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
-        for (const item of items) {
-          const changed = await tx.product.updateMany({
-            where: { id: item.productId, stock: { gte: item.quantity }, status: "ACTIVE" },
-            data: { stock: { decrement: item.quantity } },
-          });
-          if (changed.count !== 1) throw new Error("INVENTORY_CONFLICT");
-        }
-
+        // Inventory was reserved atomically when this order was created.
         await tx.paymentEvent.create({
           data: {
             orderId: order.id,
@@ -196,15 +200,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (cause instanceof Error && cause.message === "INVENTORY_CONFLICT") {
-        await recordReconciliationEvent(order.id, value.razorpayPaymentId, "client.verify.inventory_conflict", {
-          internalOrderId: order.id,
-          providerOrderId: value.razorpayOrderId,
-          providerPaymentId: value.razorpayPaymentId,
-        });
-        console.error("Captured payment has inventory conflict", { orderId: order.id });
-        return fail("Payment was captured but inventory could not be confirmed. Support reconciliation is required; do not pay again.", 409);
-      }
+
       throw cause;
     }
   } catch (cause) {
