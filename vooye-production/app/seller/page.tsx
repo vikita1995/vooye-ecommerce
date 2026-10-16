@@ -3,8 +3,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 
 type SellerApplication = {
   firebase_uid: string;
@@ -75,20 +75,15 @@ export default function SellerPortal() {
 
   useEffect(() => {
     let active = true;
-    const supabase = createClient();
-    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error: sessionError } = result;
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
       if (!active) return;
-      if (sessionError) setError("Unable to verify your sign-in session.");
-      setUser(data.session?.user ?? null);
+      setUser(firebaseUser);
       setAuthReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      if (!active) return;
-      setUser(session?.user ?? null);
-      setAuthReady(true);
-    });
-    return () => { active = false; subscription.unsubscribe(); };
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const requestApplication = useCallback(
@@ -97,9 +92,9 @@ export default function SellerPortal() {
         throw new Error("Please sign in before continuing.");
       }
 
-      const { data: { session }, error: sessionError } = await createClient().auth.getSession();
-    if (sessionError || !session?.access_token) throw new Error("Please sign in again.");
-    const token = session.access_token;
+      const firebaseUser = getFirebaseAuth().currentUser;
+      if (!firebaseUser) throw new Error("Please sign in again.");
+      const token = await firebaseUser.getIdToken();
       const response = await fetch("/api/seller/application", {
         method,
         headers: {
@@ -229,7 +224,7 @@ export default function SellerPortal() {
             <article className="panel">
               <h2>Seller application</h2>
               <p className="muted">
-                Signed in as {user.email || user.phone || "your account"}.
+                Signed in as {user.email || user.phoneNumber || "your account"}.
               </p>
 
               {loading ? (
