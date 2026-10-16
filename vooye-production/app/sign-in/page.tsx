@@ -83,7 +83,13 @@ function SignInForm() {
       const normalized = phone.trim();
       if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new Error("Enter an international phone number, e.g. +919876543210.");
       const { error } = await createClient().auth.signInWithOtp({ phone: normalized, options: { shouldCreateUser: true } });
-      if (error) throw error;
+      if (error) {
+        const raw = `${error.message} ${"code" in error ? String(error.code ?? "") : ""}`.toLowerCase();
+        if (raw.includes("unsupported phone provider") || raw.includes("phone provider") || raw.includes("sms provider")) {
+          throw new Error("Phone OTP is not enabled for this Supabase project. In Supabase Dashboard, open Authentication → Sign In / Providers → Phone, enable the Phone provider, and configure an SMS provider. Save the settings, then try again. If SMS is not configured, use email or Google sign-in for now.");
+        }
+        throw error;
+      }
       setOtpSent(true);
       setMessage("Verification code sent. Enter the code from your SMS.");
     });
