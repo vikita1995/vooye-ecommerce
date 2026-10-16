@@ -116,7 +116,7 @@ export default function AdminProductsPage() {
     setMessage("");
   }
 
-  function useStarter(version: "V01" | "V02") {
+  function loadStarter(version: "V01" | "V02") {
     const isArch = version === "V01";
     setEditingId(null);
     setImages([]);
@@ -257,8 +257,8 @@ export default function AdminProductsPage() {
 
         <div className="toolbar">
           <div className="actions">
-            <button type="button" onClick={() => useStarter("V01")}>Load V01 mirror details</button>
-            <button type="button" onClick={() => useStarter("V02")}>Load V02 mirror details</button>
+            <button type="button" onClick={() => loadStarter("V01")}>Load V01 mirror details</button>
+            <button type="button" onClick={() => loadStarter("V02")}>Load V02 mirror details</button>
             <button type="button" onClick={newProduct}>New product</button>
           </div>
           <label>Show{" "}
@@ -305,7 +305,7 @@ export default function AdminProductsPage() {
             {files.length > 0 && <p className="muted">New photos selected: {files.map((file) => file.name).join(", ")}</p>}
             {images.length > 0 && (
               <div>
-                <p className="muted">Saved photos ({images.length}) — remove any you don't need:</p>
+                <p className="muted">Saved photos ({images.length}) — remove any you do not need:</p>
                 <div className="image-list">
                   {images.map((image, index) => (
                     <div className="image-chip" key={image.storage_path}>
