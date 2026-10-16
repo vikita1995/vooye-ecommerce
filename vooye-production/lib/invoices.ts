@@ -232,10 +232,85 @@ export function buildInvoicePdf(invoice: Invoice, order: InvoicePdfOrder): Buffe
   return makePdf(pages.length ? pages : [["VOOYE INVOICE"]]);
 }
 
-/** Invoice errors must not turn a confirmed payment into a failed checkout response. */
+function htmlEscape(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/**
+ * Optional invoice email via Resend. It is skipped unless a verified sender and
+ * API key are configured. Resend idempotency prevents webhook/client retries
+ * from sending duplicate copies of the same invoice.
+ */
+export async function trySendInvoiceEmailIfConfigured(invoice: Invoice, order: InvoicePdfOrder): Promise<boolean> {
+  const apiKey = envValue("RESEND_API_KEY");
+  const from = envValue("INVOICE_FROM_EMAIL");
+  if (!apiKey || !from || !invoice.buyerEmail) return false;
+  if (invoice.emailSentAt) return true;
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": `vooye-invoice/${invoice.id}`,
+      },
+      body: JSON.stringify({
+        from,
+        to: [invoice.buyerEmail],
+        subject: `Your Vooye invoice ${invoice.invoiceNumber}`,
+        html: `<p>Hello ${htmlEscape(invoice.buyerName)},</p><p>Thank you for shopping with Vooye. Your invoice for order <strong>${htmlEscape(order.orderNumber)}</strong> is attached as a PDF.</p><p>This document records the paid order; tax treatment is described in the attached document.</p><p>VOOYE</p>`,
+        text: `Hello ${invoice.buyerName}, your invoice ${invoice.invoiceNumber} for order ${order.orderNumber} is attached as a PDF. VOOYE`,
+        attachments: [{
+          filename: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9_-]/g, "-")}.pdf`,
+          content: buildInvoicePdf(invoice, order).toString("base64"),
+        }],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      console.error("Invoice email delivery failed", { invoiceId: invoice.id, status: response.status });
+      return false;
+    }
+
+    const result = await response.json().catch(() => ({})) as { id?: string };
+    await db.invoice.update({
+      where: { id: invoice.id },
+      data: { emailSentAt: new Date(), emailProviderId: result.id ?? null },
+    });
+    return true;
+  } catch (cause) {
+    console.error("Invoice email delivery failed", {
+      invoiceId: invoice.id,
+      reason: cause instanceof Error ? cause.message : "Unknown error",
+    });
+    return false;
+  }
+}
+
+/** Invoice/email errors must not turn a confirmed payment into a failed checkout response. */
 export async function tryIssueInvoiceForPaidOrder(orderId: string): Promise<boolean> {
   try {
-    await ensureInvoiceForPaidOrder(orderId);
+    const invoice = await ensureInvoiceForPaidOrder(orderId);
+    try {
+      const order = await db.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
+      if (order) await trySendInvoiceEmailIfConfigured(invoice, {
+        orderNumber: order.orderNumber,
+        razorpayOrderId: order.razorpayOrderId,
+        razorpayPaymentId: order.razorpayPaymentId,
+        items: order.items,
+      });
+    } catch (cause) {
+      console.error("Invoice email preparation deferred", {
+        orderId,
+        reason: cause instanceof Error ? cause.message : "Unknown error",
+      });
+    }
     return true;
   } catch (cause) {
     console.error("Invoice issuance deferred", {
