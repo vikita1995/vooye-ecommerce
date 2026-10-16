@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useSearchParams } from "next/navigation";
 import { getFirebaseAuth } from "@/lib/firebase-client";
@@ -11,7 +11,7 @@ function safeNextPath(value: string | null) {
   return value.startsWith("/admin") ? value : "/admin/products";
 }
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -95,4 +95,9 @@ export default function AdminLoginPage() {
       </section>
     </main>
   );
+}
+
+
+export default function AdminLoginPage() {
+  return <Suspense fallback={<main className="wrap section"><p>Loading admin sign in…</p></main>}><AdminLoginForm /></Suspense>;
 }
