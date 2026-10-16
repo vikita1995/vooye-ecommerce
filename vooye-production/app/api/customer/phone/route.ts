@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
+import { normalizeE164Phone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,11 +30,9 @@ export async function PATCH(request: NextRequest) {
       return fail("A verified phone number is required.", 400);
     }
 
-    const requestedPhone = (
-      body as Record<string, string>
-    ).phone_number.trim();
+    const requestedPhone = normalizeE164Phone((body as Record<string, string>).phone_number);
 
-    if (!/^\+[1-9]\d{7,14}$/.test(requestedPhone)) {
+    if (!requestedPhone) {
       return fail("Enter a valid international phone number.", 400);
     }
 
