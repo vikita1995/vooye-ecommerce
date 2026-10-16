@@ -62,3 +62,7 @@ Advisors:
 - Added a transactional Supabase RPC for seller-status transitions; it writes the status and audit record atomically, with execution denied to `anon` and `authenticated` and granted to `service_role` only.
 - Added an admin-only seller audit history API and connected seller moderation UI. Status transitions are limited (pending→approved/rejected, approved→suspended, suspended→approved), require reasons for rejection/suspension, and are applied with an atomic DB update + audit insert.
 - Hardened Razorpay client verification to fetch payment state from Razorpay, compare internal order ID/amount/currency/status, prevent concurrent callback/webhook double stock decrement, and record late/mismatched/inventory-conflict payments for reconciliation. Webhooks validate amount/currency, track failure/capture events idempotently, and surface exceptions for reconciliation.
+
+- Added an atomic inventory reservation marker in `PaymentEvent`, order-time stock decrement, stock release on payment failure/provider-order failure, and protected `/api/cron/expire-pending-orders` for expiring pending orders. Checkout remains disabled unless explicitly enabled and shipping PIN allowlist is configured.
+- Admin operations now use Firebase tokens; `/api/admin` redirects to the protected `/admin/operations` UI. Legacy Supabase Google OAuth routes redirect to the Firebase sign-in page.
+- Firebase password reset uses `verifyPasswordResetCode` / `confirmPasswordReset`; Firebase Console password reset template must point to `https://vooye.in/account/reset-password`.
