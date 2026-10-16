@@ -60,6 +60,7 @@ export default function AdminProductsPage() {
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [adminReady, setAdminReady] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
@@ -68,6 +69,28 @@ export default function AdminProductsPage() {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/admin/access", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          window.location.assign("/admin/login?error=not_admin");
+          return;
+        }
+        if (!cancelled) setAdminReady(true);
+      } catch {
+        window.location.assign("/admin/login?error=not_admin");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authReady, user]);
 
   const authorizedFetch = useCallback(async (url: string, init: RequestInit = {}) => {
     const firebaseUser = getFirebaseAuth().currentUser;
@@ -230,14 +253,10 @@ export default function AdminProductsPage() {
     }
   }
 
-  if (!authReady) return <main className="wrap"><p>Checking sign-in…</p></main>;
+  if (!authReady || (user && !adminReady)) return <main className="wrap"><p>Verifying administrator access…</p></main>;
   if (!user) {
-    return (
-      <main className="wrap">
-        <header className="top"><Link className="brand" href="/">VOOYE</Link><Link href="/sign-in?next=%2Fadmin%2Fproducts">Sign in</Link></header>
-        <section className="section"><h1>Vooye product manager</h1><p className="muted">Sign in with the owner/admin account to manage your catalogue.</p><Link href="/sign-in?next=%2Fadmin%2Fproducts">Go to sign in →</Link></section>
-      </main>
-    );
+    window.location.assign("/admin/login?next=%2Fadmin%2Fproducts");
+    return <main className="wrap"><p>Redirecting to admin sign in…</p></main>;
   }
 
   return (
