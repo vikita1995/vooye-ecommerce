@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     const status =
       request.nextUrl.searchParams.get("status") ?? "draft";
 
-    if (!["draft", "active", "hidden", "all"].includes(status)) {
+    if (!["draft", "pending_review", "approved", "rejected", "archived", "all"].includes(status)) {
       return apiError(
         "Status must be draft, pending_review, approved, rejected, archived, or all.",
         400
