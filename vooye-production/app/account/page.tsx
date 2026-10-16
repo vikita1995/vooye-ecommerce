@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 import { createClient } from "@/lib/supabase/client";
 
 type Customer = {
@@ -57,36 +58,34 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
-    const supabase = createClient();
     let active = true;
-
-    void supabase.auth.getSession().then((result: Awaited<ReturnType<ReturnType<typeof createClient>["auth"]["getSession"]>>) => {
-      const { data, error: sessionError } = result;
+    const auth = getFirebaseAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!active) return;
-      if (sessionError) setError(sessionError.message);
-      setUser(data.session?.user ?? null);
-      if (data.session?.access_token) void loadProfile(data.session.access_token);
-      else setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      if (!active) return;
-      setUser(session?.user ?? null);
-      if (session?.access_token) {
-        void loadProfile(session.access_token);
-      } else {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
         setCustomer(null);
         setLoading(false);
+        return;
+      }
+      try {
+        const idToken = await firebaseUser.getIdToken();
+        if (active) await loadProfile(idToken);
+      } catch {
+        if (active) {
+          setCustomer(null);
+          setError("Your sign-in session could not be verified. Please sign in again.");
+          setLoading(false);
+        }
       }
     });
-
-    return () => { active = false; subscription.unsubscribe(); };
+    return () => { active = false; unsubscribe(); };
   }, [loadProfile]);
 
   async function getAccessToken() {
-    const { data, error } = await createClient().auth.getSession();
-    if (error || !data.session?.access_token) throw new Error("Please sign in again.");
-    return data.session.access_token;
+    const currentUser = getFirebaseAuth().currentUser;
+    if (!currentUser) throw new Error("Please sign in again.");
+    return currentUser.getIdToken();
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -149,9 +148,15 @@ export default function AccountPage() {
 
   async function signOut() {
     setBusy(true); setError("");
-    const { error } = await createClient().auth.signOut();
-    if (error) { setError(error.message); setBusy(false); return; }
-    window.location.assign("/");
+    try {
+      const response = await fetch("/api/auth/session", { method: "DELETE", cache: "no-store" });
+      if (!response.ok) throw new Error("Unable to clear your secure session.");
+      await firebaseSignOut(getFirebaseAuth());
+      window.location.assign("/");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to sign out.");
+      setBusy(false);
+    }
   }
 
   if (loading && !user) return <main className="wrap section"><p>Checking your sign-in…</p></main>;
@@ -186,8 +191,8 @@ export default function AccountPage() {
                 </article>
                 <article className="panel">
                   <h2>Email and mobile number</h2>
-                  <p><strong>Email:</strong> {user.email || "Not linked"} {user.email_confirmed_at ? "(verified)" : ""}</p>
-                  <p><strong>Mobile:</strong> {user.phone || customer.phone_e164 || "Not linked"} {user.phone_confirmed_at ? "(verified)" : ""}</p>
+                  <p><strong>Email:</strong> {user.email || "Not linked"} {user.emailVerified ? "(verified)" : ""}</p>
+                  <p><strong>Mobile:</strong> {user.phone || customer.phone_e164 || "Not linked"} {user.phoneNumber ? "(verified)" : ""}</p>
                   <h3>{user.phone ? "Update mobile number" : "Add mobile number"}</h3>
                   <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
                     <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
