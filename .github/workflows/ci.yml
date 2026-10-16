@@ -28,6 +28,18 @@ jobs:
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
       DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/vooye?schema=public
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: example.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: vooye-ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+      FIREBASE_ADMIN_PROJECT_ID: vooye-ci
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      RAZORPAY_KEY_ID: rzp_test_placeholder
+      RAZORPAY_KEY_SECRET: placeholder
+      RAZORPAY_WEBHOOK_SECRET: placeholder
+      NEXT_PUBLIC_RAZORPAY_KEY_ID: rzp_test_placeholder
+      SHIPPING_FLAT_FEE_PAISE: "9900"
 
     steps:
       - name: Checkout repository
@@ -59,3 +71,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Production build
+        run: npm run build
