@@ -201,6 +201,9 @@ export async function POST(request: Request) {
       throw cause;
     }
   } catch (cause) {
+    if (isUniqueConstraintError(cause)) {
+      return response({ received: true, duplicate: true });
+    }
     const code = cause instanceof Error ? cause.message : "Unknown error";
     console.error("Razorpay webhook processing failed:", code);
     return response({ error: "Webhook processing failed. Please retry." }, 500);
