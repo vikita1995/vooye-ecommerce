@@ -107,8 +107,9 @@ function validateAddress(input: unknown) {
   }
 
   const postalCode = String(body.postal_code).trim();
-  if (!/^[A-Za-z0-9 -]{3,20}$/.test(postalCode)) {
-    return { error: "Please enter a valid postal code." };
+  const countryForPostal = String(body.country_code ?? "IN").trim().toUpperCase();
+  if (countryForPostal === "IN" ? !/^\\d{6}$/.test(postalCode) : !/^[A-Za-z0-9 -]{3,20}$/.test(postalCode)) {
+    return { error: countryForPostal === "IN" ? "Enter a valid 6-digit Indian PIN code." : "Please enter a valid postal code." };
   }
 
   const phone = String(body.phone_e164).trim();
