@@ -125,6 +125,40 @@ jobs:
           set -euo pipefail
           gcloud run deploy "$SERVICE"             --image "$IMAGE"             --project "$PROJECT_ID"             --region "$REGION"             --platform managed             --allow-unauthenticated             --port 8080             --quiet
 
+      - name: Smoke test deployed Cloud Run revision
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          if [[ -z "$SERVICE_URL" ]]; then
+            echo "::error::Cloud Run did not return a service URL."
+            exit 1
+          fi
+
+          # Allow the new revision to become ready; fail the deployment if health never recovers.
+          ready=0
+          for attempt in $(seq 1 18); do
+            if curl --silent --show-error --fail --max-time 10 "$SERVICE_URL/api/health" -o /tmp/vooye-health.json \
+              && jq -e '.status == "ok" and .dependencies.database == "ok"' /tmp/vooye-health.json >/dev/null; then
+              ready=1
+              break
+            fi
+            echo "Health check attempt $attempt/18 did not pass; retrying in 5 seconds."
+            sleep 5
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            echo "::error::Cloud Run smoke test failed. Inspect the new revision and application logs before retrying."
+            cat /tmp/vooye-health.json 2>/dev/null || true
+            exit 1
+          fi
+
+          # Confirm the public checkout status endpoint is reachable and returns its expected contract.
+          curl --silent --show-error --fail --max-time 10 "$SERVICE_URL/api/checkout/status" -o /tmp/vooye-checkout.json
+          jq -e '(.enabled | type) == "boolean" and (.message | type) == "string"' /tmp/vooye-checkout.json >/dev/null
+          echo "Cloud Run smoke tests passed for $SERVICE_URL"
+
       - name: Setup Firebase CLI
         run: npm install --global firebase-tools
 
