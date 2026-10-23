@@ -137,20 +137,28 @@ jobs:
             exit 1
           fi
 
-          # Allow the new revision to become ready; fail the deployment if health never recovers.
+          # Capture both HTTP status and response body so failures are diagnosable in Actions.
+          # Do not print connection strings or environment values; the health route redacts them.
           ready=0
           for attempt in $(seq 1 18); do
-            if curl --silent --show-error --fail --max-time 10 "$SERVICE_URL/api/health" -o /tmp/vooye-health.json \
-              && jq -e '.status == "ok" and .dependencies.database == "ok"' /tmp/vooye-health.json >/dev/null; then
+            status="$(curl --silent --show-error --max-time 10 \
+              -w '%{http_code}' "$SERVICE_URL/api/health" -o /tmp/vooye-health.json || true)"
+            if [[ "$status" == "200" ]] \
+              && jq -e '.status == "ok" and .dependencies.database == "ok"' /tmp/vooye-health.json >/dev/null 2>&1; then
               ready=1
               break
             fi
-            echo "Health check attempt $attempt/18 did not pass; retrying in 5 seconds."
+            echo "Health check attempt $attempt/18 returned HTTP ${status:-unknown}; retrying in 5 seconds."
             sleep 5
           done
           if [[ "$ready" -ne 1 ]]; then
-            echo "::error::Cloud Run smoke test failed. Inspect the new revision and application logs before retrying."
-            cat /tmp/vooye-health.json 2>/dev/null || true
+            echo "::error::Cloud Run smoke test failed. The service was deployed but did not pass its database-backed health check."
+            echo "Health response (expected to contain only redacted status/dependency fields):"
+            jq -c '{status, service, dependencies, timestamp}' /tmp/vooye-health.json 2>/dev/null || echo "No valid JSON health response was returned."
+            echo "Recent Cloud Run application errors for the new revision:"
+            gcloud logging read \
+              'resource.type="cloud_run_revision" AND resource.labels.service_name="'$SERVICE'" AND resource.labels.location="'$REGION'" AND severity>=ERROR' \
+              --project "$PROJECT_ID" --limit=30 --format='value(timestamp,textPayload,jsonPayload.message)' || true
             exit 1
           fi
 
