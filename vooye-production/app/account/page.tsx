@@ -192,6 +192,17 @@ export default function AccountPage() {
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = null;
       setUser(currentUser);
+
+      // Reflect the successful API response immediately so the status does not
+      // remain "Not linked" while the profile is reloaded.
+      if (result.phone?.phone_e164 && result.phone?.phone_verified_at) {
+        setCustomer((previous) => previous ? {
+          ...previous,
+          phone_e164: result.phone.phone_e164,
+          phone_verified_at: result.phone.phone_verified_at,
+        } : previous);
+      }
+
       setMessage("Your mobile number has been verified and saved to your account.");
       await loadProfile(token);
     } catch (cause) {
