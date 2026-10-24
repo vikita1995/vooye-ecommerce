@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getPublishedProducts } from "@/lib/catalog";
-import ProfileLink from "@/components/profile-link";
+import StorefrontNavigation from "@/components/storefront-navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,12 +38,7 @@ export default async function Home() {
     <main className="wrap">
       <header className="top">
         <Link className="brand" href="/" aria-label="Vooye home"><img src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/brand/vooye-logo.png" alt="Vooye" style={{ display: "block", width: 138, height: 54, objectFit: "contain" }} /></Link>
-        <nav className="nav">
-          <Link href="/#shop">Shop</Link>
-          <Link href="/account/orders">My orders</Link>
-          <Link href="/cart">Cart</Link>
-          <ProfileLink />
-        </nav>
+        <StorefrontNavigation />
       </header>
 
       <div className="announcement-bar">A more considered home starts with one beautiful detail <span aria-hidden="true">✦</span> Discover VOOYE</div>
