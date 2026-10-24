@@ -6,6 +6,7 @@ import { onAuthStateChanged, PhoneAuthProvider, RecaptchaVerifier, signOut as fi
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import { normalizeE164Phone } from "@/lib/validation";
 import { createClient } from "@/lib/supabase/client";
+import StorefrontNavigation from "@/components/storefront-navigation";
 
 type Customer = {
   id: string;
@@ -217,7 +218,7 @@ export default function AccountPage() {
     <main className="wrap">
       <header className="top">
         <Link className="brand" href="/">VOOYE</Link>
-        <nav className="nav"><Link href="/">Shop</Link><Link href="/account/orders">My orders</Link><Link href="/account/addresses">My addresses</Link><Link href="/seller">Seller portal</Link></nav>
+        <StorefrontNavigation />
       </header>
       <section className="section">
         <div className="eyebrow">YOUR ACCOUNT</div>
