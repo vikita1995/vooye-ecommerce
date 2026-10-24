@@ -62,12 +62,38 @@ export default function AddToCartButton({ item }: { item: Omit<CartItem, "quanti
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1800);
   }
+
+  function removeOne() {
+    const cart = readCart();
+    const existing = cart.find((entry) => entry.productId === item.productId);
+    if (!existing) {
+      setQuantity(0);
+      return;
+    }
+    if (existing.quantity <= 1) {
+      writeCart(cart.filter((entry) => entry.productId !== item.productId));
+      setQuantity(0);
+    } else {
+      writeCart(cart.map((entry) => entry.productId === item.productId
+        ? { ...entry, quantity: entry.quantity - 1 } : entry));
+      setQuantity((current) => Math.max(0, current - 1));
+    }
+  }
+
   return (
     <div className="add-to-cart-control">
-      <button className="button" type="button" onClick={add} aria-label={`Add one ${item.name} to cart`}>
-        {added ? "Added ✓ · +1 more" : quantity > 0 ? `Add +1 · ${quantity} in cart` : "Add to cart +1"}
-      </button>
-      {quantity > 0 && <span className="cart-quantity" aria-live="polite">Quantity: {quantity}</span>}
+      {quantity > 0 ? (
+        <div className="product-quantity-stepper" aria-label={`Quantity for ${item.name}`}>
+          <button type="button" onClick={removeOne} aria-label={`Remove one ${item.name}`}>−</button>
+          <output aria-live="polite">{quantity}</output>
+          <button type="button" onClick={add} aria-label={`Add one ${item.name}`}>+1</button>
+        </div>
+      ) : (
+        <button className="button" type="button" onClick={add} aria-label={`Add one ${item.name} to cart`}>
+          {added ? "Added ✓" : "Add to cart +1"}
+        </button>
+      )}
+      {quantity > 0 && <span className="cart-quantity" aria-live="polite">In cart</span>}
     </div>
   );
 }
