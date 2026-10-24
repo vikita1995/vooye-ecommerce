@@ -166,3 +166,22 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .product-image { height: 280px; }
   .hero-actions { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* Responsive storefront hamburger navigation */
+.storefront-navigation { position: relative; }
+.menu-toggle { display: none; align-items: center; justify-content: center; gap: 8px; min-height: 42px; cursor: pointer; }
+.menu-toggle > span:first-child { font-size: 20px; line-height: 1; }
+.menu-toggle-label { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+.storefront-menu { display: flex; }
+.storefront-menu > span { display: inline-flex; }
+@media (max-width: 760px) {
+  .top { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .storefront-navigation { margin-left: auto; }
+  .menu-toggle { display: inline-flex; }
+  .storefront-menu { display: none; position: absolute; top: calc(100% + 12px); right: 0; z-index: 100; min-width: 220px; padding: 18px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 35px #2b21151a; flex-direction: column; align-items: stretch; gap: 0; }
+  .storefront-menu.is-open { display: flex; }
+  .storefront-menu > a, .storefront-menu > span { display: flex; padding: 13px 4px; border-bottom: 1px solid var(--line); }
+  .storefront-menu > span { border-bottom: 0; }
+  .storefront-menu .profile-link { width: 100%; }
+}
