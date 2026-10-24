@@ -528,3 +528,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   opacity: .55;
   cursor: not-allowed;
 }
+.remove-item-button { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:8px 14px; border:1px solid #b85d4b; border-radius:3px; background:#fff8f6; color:#8c3025; font-size:14px; font-weight:600; line-height:1.2; cursor:pointer; }
+.remove-item-button:hover { background:#fbe8e3; border-color:#8c3025; }
+.remove-item-button:focus-visible { outline:2px solid #8c3025; outline-offset:3px; }
