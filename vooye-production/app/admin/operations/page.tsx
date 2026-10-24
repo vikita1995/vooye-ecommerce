@@ -279,8 +279,11 @@ export default function AdminPortal() {
       <header className="top">
         <Link className="brand" href="/">VOOYE</Link>
         <nav className="nav">
+          <Link href="/admin/dashboard">Overview</Link>
+          <Link href="/admin/customers">Customers</Link>
+          <Link href="/admin/orders">Orders</Link>
+          <Link href="/admin/products">Products</Link>
           <Link href="/">Storefront</Link>
-          <Link href="/seller">Seller portal</Link>
         </nav>
       </header>
 
