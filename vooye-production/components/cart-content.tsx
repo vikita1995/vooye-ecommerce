@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { readCart, writeCart, type CartItem } from "./add-to-cart";
+import { MAX_CART_QUANTITY, readCart, writeCart, type CartItem } from "./add-to-cart";
 
 function money(paise: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
@@ -24,8 +24,9 @@ export default function CartContent() {
   }, [sync]);
 
   function updateQuantity(productId: string, quantity: number) {
-    const next = quantity <= 0 ? items.filter((item) => item.productId !== productId)
-      : items.map((item) => item.productId === productId ? { ...item, quantity } : item);
+    const safeQuantity = Math.min(MAX_CART_QUANTITY, Math.max(0, Math.trunc(quantity)));
+    const next = safeQuantity === 0 ? items.filter((item) => item.productId !== productId)
+      : items.map((item) => item.productId === productId ? { ...item, quantity: safeQuantity } : item);
     writeCart(next);
     setItems(next);
   }
@@ -48,7 +49,7 @@ export default function CartContent() {
                 <div className="quantity-stepper" aria-label={`Quantity for ${item.name}`}>
                   <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={item.quantity <= 1}>−</button>
                   <output aria-live="polite">{item.quantity}</output>
-                  <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity + 1)}>+1</button>
+                  <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={item.quantity >= MAX_CART_QUANTITY}>+1</button>
                 </div>
                 <button className="remove-item-button" type="button" onClick={() => updateQuantity(item.productId, 0)} aria-label={`Remove ${item.name} from cart`}>Remove</button>
               </div>
