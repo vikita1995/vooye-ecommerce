@@ -23,15 +23,26 @@ function safeErrorCode(error: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
-  // Session creation is only for interactive login; block cross-site session fixation.
+  // Behind Cloud Run / the production proxy, request.nextUrl.origin may be the
+  // internal service origin. Trust the configured public site origin instead.
+  // This keeps the origin check strict without rejecting legitimate requests
+  // from https://vooye.in.
   const origin = request.headers.get("origin");
-  const expectedOrigin = request.nextUrl.origin;
+  let expectedOrigin = request.nextUrl.origin;
+  if (process.env.SITE_URL) {
+    try {
+      expectedOrigin = new URL(process.env.SITE_URL).origin;
+    } catch {
+      console.error("[auth-session] invalid_site_url_configuration");
+      return NextResponse.json({ error: "Authentication is temporarily unavailable." }, { status: 503 });
+    }
+  }
   if (origin && origin !== expectedOrigin) {
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
   const authorization = request.headers.get("authorization") ?? "";
-  const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const idToken = authorization.match(/^Bearer\\s+(.+)$/i)?.[1]?.trim();
   if (!idToken || idToken.length > 16_384) {
     return NextResponse.json({ error: "Firebase ID token required." }, { status: 401 });
   }
