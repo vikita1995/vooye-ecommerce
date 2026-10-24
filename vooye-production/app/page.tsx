@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPublishedProducts } from "@/lib/catalog";
 import StorefrontNavigation from "@/components/storefront-navigation";
+import ProductCardActions from "@/components/product-card-actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -121,14 +122,14 @@ export default async function Home() {
                 <h3>{product.name}</h3>
                 <div className="product-bottom">
                   <div className="price">{formatPrice(product.pricePaise)}</div>
-                  <Link
-                    className="product-link"
-                    href={`/product/${encodeURIComponent(product.slug)}`}
-                    aria-label={`View ${product.name}`}
-                  >
-                    View piece <span aria-hidden="true">↗</span>
-                  </Link>
                 </div>
+                <ProductCardActions item={{
+                  productId: product.id,
+                  slug: product.slug,
+                  name: product.name,
+                  pricePaise: product.pricePaise,
+                  imageUrl: product.imageUrl,
+                }} />
               </article>
             ))}
           </div>
