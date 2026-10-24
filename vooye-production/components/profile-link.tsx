@@ -30,30 +30,20 @@ export default function ProfileLink() {
     };
   }, []);
 
-  const label = user ? "My account" : "Sign in";
+  const displayName = user?.displayName?.trim() || "";
+  const firstName = displayName.split(/\s+/)[0] || "";
+  const initial = firstName.charAt(0).toUpperCase();
 
   return (
     <Link
       href={user ? "/account" : "/sign-in"}
       className="profile-link"
       aria-label={user ? "Open my account" : "Sign in to your account"}
-      title={label}
+      title={user ? "My account" : "Sign in"}
     >
-      {user?.photoURL ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={user.photoURL}
-          alt=""
-          className="profile-avatar"
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <span className="profile-avatar profile-avatar-fallback" aria-hidden="true">
-          ♙
-        </span>
-      )}
-
-      <span>{ready ? label : "Account"}</span>
+      <span className="profile-avatar profile-avatar-fallback" aria-hidden="true">
+        {ready && user ? initial : ""}
+      </span>
     </Link>
   );
 }
