@@ -483,3 +483,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .add-to-cart-control .button { width:100%; }
 .cart-quantity { display:block; color:var(--muted); font-size:11px; line-height:1.4; text-align:center; }
 .product-card-actions .add-to-cart-control { min-width:0; }
+
+.quantity-stepper { display:inline-flex; align-items:center; gap:12px; }
+.quantity-stepper button { min-width:38px; min-height:36px; padding:8px 12px; }
+.quantity-stepper output { min-width:28px; text-align:center; font-variant-numeric:tabular-nums; }
