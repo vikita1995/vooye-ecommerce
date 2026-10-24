@@ -25,7 +25,7 @@ export default function CartContent() {
 
   function updateQuantity(productId: string, quantity: number) {
     const next = quantity <= 0 ? items.filter((item) => item.productId !== productId)
-      : items.map((item) => item.productId === productId ? { ...item, quantity: Math.min(99, quantity) } : item);
+      : items.map((item) => item.productId === productId ? { ...item, quantity } : item);
     writeCart(next);
     setItems(next);
   }
@@ -44,9 +44,12 @@ export default function CartContent() {
             {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ width: "100%", height: 140, objectFit: "contain", background: "#eee6db" }} /> : <div className="mini-mirror" aria-hidden="true" />}
             <div><h2>{item.name}</h2><p className="price">{money(item.pricePaise)}</p>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
-                <label>Quantity <select aria-label={`Quantity for ${item.name}`} value={item.quantity} onChange={(event) => updateQuantity(item.productId, Number(event.target.value))}>
-                  {Array.from({ length: 10 }, (_, index) => index + 1).map((qty) => <option key={qty} value={qty}>{qty}</option>)}
-                </select></label>
+                <span>Quantity</span>
+                <div className="quantity-stepper" aria-label={`Quantity for ${item.name}`}>
+                  <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={item.quantity <= 1}>−</button>
+                  <output aria-live="polite">{item.quantity}</output>
+                  <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity + 1)}>+1</button>
+                </div>
                 <button className="text-link" type="button" onClick={() => updateQuantity(item.productId, 0)}>Remove</button>
               </div>
               <p style={{ marginTop: 12 }}><strong>Line total: {money(item.pricePaise * item.quantity)}</strong></p>
