@@ -185,3 +185,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .storefront-menu > span { border-bottom: 0; }
   .storefront-menu .profile-link { width: 100%; }
 }
+
+.navigation-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+@media (max-width: 760px) {
+  .navigation-actions { gap: 10px; }
+  .desktop-profile .profile-link > span:last-child { display: none; }
+}
