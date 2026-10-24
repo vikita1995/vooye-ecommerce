@@ -31,6 +31,7 @@ export default function AccountPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [phoneVerificationId, setPhoneVerificationId] = useState("");
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
@@ -188,7 +189,7 @@ export default function AccountPage() {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Verified number could not be saved to your profile.");
-      setPhone(""); setOtp(""); setPhoneOtpSent(false); setPhoneVerificationId(""); setResendCooldown(0);
+      setPhone(""); setOtp(""); setPhoneOtpSent(false); setEditingPhone(false); setPhoneVerificationId(""); setResendCooldown(0);
       recaptchaVerifier.current?.clear();
       recaptchaVerifier.current = null;
       setUser(currentUser);
@@ -256,16 +257,26 @@ export default function AccountPage() {
                 <article className="panel">
                   <h2>Email and mobile number</h2>
                   <p><strong>Email:</strong> {user.email || "Not linked"} {user.emailVerified ? "(verified)" : ""}</p>
-                  <p><strong>Mobile:</strong> {customer.phone_e164 || user.phoneNumber || "Not linked"} {customer.phone_verified_at ? "(verified)" : ""}</p>
-                  <h3>{user.phoneNumber ? "Update mobile number" : "Add mobile number"}</h3>
-                  <div id="phone-recaptcha-container" />
-                  <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
-                    <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
-                    {phoneOtpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
-                    <button type="submit" disabled={busy || (phoneOtpSent && otp.length !== 6)}>{busy ? "Please wait…" : phoneOtpSent ? "Verify and save number" : "Send verification code"}</button>
-                    {phoneOtpSent && <button type="button" disabled={busy || resendCooldown > 0} onClick={() => void resendPhoneOtp()}>{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend verification code"}</button>}
-                    {phoneOtpSent && <button type="button" disabled={busy} onClick={() => { setPhoneOtpSent(false); setOtp(""); setPhoneVerificationId(""); setResendCooldown(0); setMessage(""); recaptchaVerifier.current?.clear(); recaptchaVerifier.current = null; }}>Use a different number</button>}
-                  </form>
+                  <p><strong>Mobile:</strong> {customer.phone_e164 || "Not linked"} {customer.phone_verified_at ? "· Verified" : ""}</p>
+                  {customer.phone_e164 && customer.phone_verified_at && !editingPhone ? (
+                    <div className="phone-verified-state" role="status">
+                      <p>✓ Your mobile number is verified and saved to your account.</p>
+                      <button type="button" onClick={() => { setEditingPhone(true); setPhone(""); setOtp(""); setMessage(""); }}>Change mobile number</button>
+                    </div>
+                  ) : (
+                    <>
+                      <h3>{customer.phone_e164 ? "Update mobile number" : "Add mobile number"}</h3>
+                      <div id="phone-recaptcha-container" />
+                      <form className="stack" onSubmit={phoneOtpSent ? verifyPhoneOtp : sendPhoneOtp}>
+                        <label className="field">Mobile number with country code<input type="tel" autoComplete="tel" placeholder="+919876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={phoneOtpSent || busy} required /></label>
+                        {phoneOtpSent && <label className="field">6-digit verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required /></label>}
+                        <button type="submit" disabled={busy || (phoneOtpSent && otp.length !== 6)}>{busy ? "Please wait…" : phoneOtpSent ? "Verify and save number" : "Send verification code"}</button>
+                        {phoneOtpSent && <button type="button" disabled={busy || resendCooldown > 0} onClick={() => void resendPhoneOtp()}>{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend verification code"}</button>}
+                        {phoneOtpSent && <button type="button" disabled={busy} onClick={() => { setPhoneOtpSent(false); setOtp(""); setPhoneVerificationId(""); setResendCooldown(0); setMessage(""); recaptchaVerifier.current?.clear(); recaptchaVerifier.current = null; }}>Use a different number</button>}
+                        {editingPhone && <button type="button" disabled={busy} onClick={() => { setEditingPhone(false); setPhone(""); setOtp(""); setPhoneOtpSent(false); setPhoneVerificationId(""); setMessage(""); recaptchaVerifier.current?.clear(); recaptchaVerifier.current = null; }}>Cancel</button>}
+                      </form>
+                    </>
+                  )}
                 </article>
                 <div className="grid">
                   <article className="panel"><h2>My addresses</h2><p className="muted">Manage your shipping and billing addresses.</p><Link href="/account/addresses">Manage my addresses →</Link></article>
