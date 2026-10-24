@@ -294,3 +294,141 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
     gap: clamp(12px, 2vw, 29px);
   }
 }
+
+
+/* Customer account page refinement */
+.account-page {
+  max-width: 1120px;
+}
+.account-page > .top {
+  margin-bottom: 8px;
+}
+.account-page > .section {
+  padding-top: 42px;
+  padding-bottom: 64px;
+}
+.account-page > .section > h1 {
+  margin: 10px 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(36px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+.account-page > .section > p.muted {
+  max-width: 650px;
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.account-page .panel {
+  margin: 16px 0;
+  padding: clamp(20px, 3vw, 32px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px #3a2a1908;
+}
+.account-page .panel h2 {
+  margin: 0 0 22px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.15;
+  font-weight: 400;
+  letter-spacing: -.025em;
+}
+.account-page .panel h3 {
+  margin: 26px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.account-page .panel p {
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.account-page .stack {
+  gap: 16px;
+}
+.account-page .field {
+  gap: 8px;
+  color: #51483f;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .025em;
+}
+.account-page .field input,
+.account-page .field select,
+.account-page .field textarea {
+  min-height: 46px;
+  padding: 12px 14px;
+  border: 1px solid #ded4c7;
+  border-radius: 2px;
+  background: #fffefa;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.account-page .field input:focus,
+.account-page .field select:focus,
+.account-page .field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px #865c4314;
+  outline: none;
+}
+.account-page .panel form > button,
+.account-page > .section > button {
+  min-height: 46px;
+  padding: 13px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.account-page .grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.account-page .grid .panel {
+  height: 100%;
+}
+.account-page .grid .panel h2 {
+  margin-bottom: 12px;
+  font-size: 27px;
+}
+.account-page .grid .panel a,
+.account-page .panel > a {
+  display: inline-flex;
+  margin-top: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #c7ad94;
+  color: #76543d;
+  font-size: 12px;
+  font-weight: 600;
+}
+.account-page .notice {
+  border-left: 3px solid var(--accent);
+  padding: 14px 18px;
+  font-size: 13px;
+}
+.account-page #phone-recaptcha-container {
+  margin: 12px 0;
+}
+@media (max-width: 650px) {
+  .account-page > .section {
+    padding-top: 30px;
+  }
+  .account-page > .section > p.muted {
+    margin-bottom: 22px;
+  }
+  .account-page .panel {
+    padding: 20px 16px;
+  }
+  .account-page .grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .account-page .panel h2 {
+    margin-bottom: 18px;
+  }
+}

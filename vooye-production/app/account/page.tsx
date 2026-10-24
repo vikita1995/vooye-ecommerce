@@ -215,7 +215,7 @@ export default function AccountPage() {
   if (loading && !user) return <main className="wrap section"><p>Checking your sign-in…</p></main>;
 
   return (
-    <main className="wrap">
+    <main className="wrap account-page">
       <header className="top">
         <Link className="brand" href="/">VOOYE</Link>
         <StorefrontNavigation />
