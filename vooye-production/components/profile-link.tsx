@@ -44,6 +44,7 @@ export default function ProfileLink() {
       <span className="profile-avatar profile-avatar-fallback" aria-hidden="true">
         {ready && user ? initial : ""}
       </span>
+      {ready && !user && <span>Sign in</span>}
     </Link>
   );
 }
