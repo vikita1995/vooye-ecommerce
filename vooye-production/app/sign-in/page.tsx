@@ -148,7 +148,7 @@ function SignInForm() {
   async function verifyPhoneOtp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await run(async () => {
-      if (!/^\\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit code.");
+      if (!/^\d{6}$/.test(otp.trim())) throw new Error("Enter the 6-digit code.");
       if (!confirmation.current) throw new Error("Request a new verification code first.");
       const result = await confirmation.current.confirm(otp.trim());
       await establishSession(result.user);
