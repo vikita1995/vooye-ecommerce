@@ -18,13 +18,40 @@ export function readCart(): CartItem[] {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(CART_KEY) || "[]");
     if (!Array.isArray(value)) return [];
-    return value.filter((item): item is CartItem =>
-      item && typeof item.productId === "string" &&
-      typeof item.slug === "string" && typeof item.name === "string" &&
-      Number.isInteger(item.pricePaise) && item.pricePaise >= 0 &&
-      Number.isSafeInteger(item.quantity) && item.quantity > 0 && item.quantity <= MAX_CART_QUANTITY
-    );
-  } catch { return []; }
+
+    const byProduct = new Map<string, CartItem>();
+    for (const candidate of value) {
+      if (
+        !candidate ||
+        typeof candidate.productId !== "string" ||
+        !candidate.productId.trim() ||
+        typeof candidate.slug !== "string" ||
+        typeof candidate.name !== "string" ||
+        !Number.isSafeInteger(candidate.pricePaise) ||
+        candidate.pricePaise < 0 ||
+        !Number.isSafeInteger(candidate.quantity) ||
+        candidate.quantity <= 0
+      ) continue;
+
+      const item: CartItem = {
+        productId: candidate.productId,
+        slug: candidate.slug,
+        name: candidate.name,
+        pricePaise: candidate.pricePaise,
+        imageUrl: typeof candidate.imageUrl === "string" ? candidate.imageUrl : null,
+        quantity: Math.min(MAX_CART_QUANTITY, candidate.quantity),
+      };
+      const existing = byProduct.get(item.productId);
+      if (existing) {
+        existing.quantity = Math.min(MAX_CART_QUANTITY, existing.quantity + item.quantity);
+      } else {
+        byProduct.set(item.productId, item);
+      }
+    }
+    return [...byProduct.values()];
+  } catch {
+    return [];
+  }
 }
 
 export function writeCart(items: CartItem[]) {
