@@ -87,6 +87,15 @@ export default function CheckoutPage() {
     setItems(readCart());
   }, []);
 
+  function updateCartQuantity(productId: string, quantity: number) {
+    const current = readCart();
+    const next = quantity <= 0
+      ? current.filter((item) => item.productId !== productId)
+      : current.map((item) => item.productId === productId ? { ...item, quantity } : item);
+    writeCart(next);
+    setItems(next);
+  }
+
   useEffect(() => {
     syncCart();
     window.addEventListener("storage", syncCart);
@@ -378,12 +387,23 @@ export default function CheckoutPage() {
 
             <article className="panel">
               <h2>Order summary</h2>
+              <p className="muted">Review products and quantities before payment. Use +1 to add items or remove a product from this order.</p>
               {items.map((item) => (
-                <div key={item.productId} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 0", borderBottom: "1px solid #e5e0d9" }}>
-                  <div><strong>{item.name}</strong><p className="muted">Qty {item.quantity}</p></div>
-                  <span>{money(item.pricePaise * item.quantity)}</span>
+                <div key={item.productId} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, padding: "14px 0", borderBottom: "1px solid #e5e0d9" }}>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p className="muted" style={{ margin: "6px 0" }}>{money(item.pricePaise)} each</p>
+                    <div className="quantity-stepper" aria-label={`Quantity for ${item.name}`}>
+                      <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity - 1)} disabled={busy || item.quantity <= 1}>−</button>
+                      <output aria-live="polite">{item.quantity}</output>
+                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity + 1)} disabled={busy}>+1</button>
+                    </div>
+                    <p style={{ marginTop: 8 }}><button type="button" className="text-link" onClick={() => updateCartQuantity(item.productId, 0)} disabled={busy}>Remove product</button></p>
+                  </div>
+                  <strong>{money(item.pricePaise * item.quantity)}</strong>
                 </div>
               ))}
+              <p style={{ marginTop: 12 }}><Link href="/cart">Manage full cart →</Link> · <Link href="/#shop">Continue shopping</Link></p>
               <p className="muted" style={{ marginTop: 14 }}>Browser prices are estimates. The server recalculates current listing prices and stock before creating an order.</p>
               <p className="muted">Subtotal estimate</p>
               <h2>{money(subtotal)}</h2>
