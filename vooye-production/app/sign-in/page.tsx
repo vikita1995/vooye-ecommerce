@@ -17,14 +17,9 @@ import {
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import { normalizeE164Phone } from "@/lib/validation";
 
-function safeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/account";
-  return value;
-}
-
 function SignInForm() {
   const searchParams = useSearchParams();
-  const nextPath = safeNextPath(searchParams.get("next"));
+
   const [mode, setMode] = useState<"sign-in" | "sign-up" | "phone" | "reset">("sign-in");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -74,7 +69,7 @@ function SignInForm() {
       await signOut(getFirebaseAuth());
       throw new Error(`${safeMessage} (HTTP ${response.status})`);
     }
-    window.location.assign(nextPath);
+    window.location.assign("/");
   }
 
   async function run(action: () => Promise<void>) {
@@ -94,7 +89,6 @@ function SignInForm() {
         return;
       }
       if (mode === "sign-up") {
-        if (fullName.trim().length < 2) throw new Error("Enter your full name.");
         const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
         await establishSession(credential.user);
         return;
@@ -175,7 +169,7 @@ function SignInForm() {
         {mode !== "phone" && mode !== "reset" && <p className="muted" style={{ textAlign: "center" }}>or use email and password</p>}
         {mode !== "phone" ? (
           <form className="stack" onSubmit={submitEmail}>
-            {mode === "sign-up" && <label className="field">Full name<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} minLength={2} maxLength={100} required /></label>}
+            {mode === "sign-up" && <label className="field">Full name<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={100} /></label>}
             <label className="field">Email address<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} /></label>
             {mode !== "reset" && <label className="field">Password<input type="password" autoComplete={mode === "sign-up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={128} required /></label>}
             <button type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "sign-up" ? "Create account" : mode === "reset" ? "Send reset link" : "Sign in"}</button>

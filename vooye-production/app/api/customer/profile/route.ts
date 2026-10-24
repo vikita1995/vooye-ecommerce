@@ -254,18 +254,13 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, string | null> = {};
 
     if ("full_name" in input) {
-      if (
-        typeof input.full_name !== "string" ||
-        input.full_name.trim().length < 2 ||
-        input.full_name.trim().length > 100
-      ) {
-        return jsonError(
-          "Enter a name between 2 and 100 characters.",
-          400
-        );
+      if (input.full_name === null || (typeof input.full_name === "string" && input.full_name.trim() === "")) {
+        updates.full_name = null;
+      } else if (typeof input.full_name === "string" && input.full_name.trim().length >= 2 && input.full_name.trim().length <= 100) {
+        updates.full_name = input.full_name.trim();
+      } else {
+        return jsonError("Enter a name between 2 and 100 characters, or leave it blank.", 400);
       }
-
-      updates.full_name = input.full_name.trim();
     }
 
     if ("date_of_birth" in input) {

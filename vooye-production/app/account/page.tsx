@@ -235,7 +235,7 @@ export default function AccountPage() {
                 <article className="panel">
                   <h2>Personal information</h2>
                   <form className="stack" onSubmit={saveProfile}>
-                    <label className="field">Full name<input name="full_name" autoComplete="name" minLength={2} maxLength={100} required value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+                    <label className="field">Full name<input name="full_name" autoComplete="name" maxLength={100} value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
                     <label className="field">Date of birth<input name="date_of_birth" type="date" min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} /></label>
                     <label className="field">Gender<select name="gender" value={gender} onChange={(e) => setGender(e.target.value)}><option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></label>
                     <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
