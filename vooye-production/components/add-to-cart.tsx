@@ -88,7 +88,7 @@ export default function AddToCartButton({ item }: { item: Omit<CartItem, "quanti
   function add() {
     const cart = readCart();
     const existing = cart.find((entry) => entry.productId === item.productId);
-    if (existing?.quantity >= MAX_CART_QUANTITY) {
+    if (existing && existing.quantity >= MAX_CART_QUANTITY) {
       setAdded(false);
       return;
     }
