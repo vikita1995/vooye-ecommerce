@@ -487,3 +487,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .quantity-stepper { display:inline-flex; align-items:center; gap:12px; }
 .quantity-stepper button { min-width:38px; min-height:36px; padding:8px 12px; }
 .quantity-stepper output { min-width:28px; text-align:center; font-variant-numeric:tabular-nums; }
+
+.product-quantity-stepper { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; border:1px solid var(--line); padding:4px 8px; }
+.product-quantity-stepper button { min-width:36px; min-height:32px; border:1px solid var(--line); background:var(--paper); color:var(--ink); font-size:16px; cursor:pointer; }
+.product-quantity-stepper output { flex:1; text-align:center; font-variant-numeric:tabular-nums; font-weight:600; }
