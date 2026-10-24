@@ -95,7 +95,7 @@ export default function AdminSellerDashboard() {
             <td style={{ padding: 12, borderBottom: "1px solid var(--line)" }}>{item.stock}</td>
             <td style={{ padding: 12, borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>{new Date(item.created_at).toLocaleDateString("en-IN")}</td>
           </tr>)}</tbody>
-        </table>}
+        </table></div>}
       <p className="muted" style={{ marginTop: 16 }}>Showing up to 500 latest listings. Seller UID is shown as an identifier; this dashboard does not expose authentication credentials.</p>
     </section>
   </main>;
