@@ -12,6 +12,7 @@ export type CartItem = {
 };
 
 const CART_KEY = "vooye-cart-v1";
+export const MAX_CART_QUANTITY = 10;
 
 export function readCart(): CartItem[] {
   try {
@@ -21,13 +22,21 @@ export function readCart(): CartItem[] {
       item && typeof item.productId === "string" &&
       typeof item.slug === "string" && typeof item.name === "string" &&
       Number.isInteger(item.pricePaise) && item.pricePaise >= 0 &&
-      Number.isInteger(item.quantity) && item.quantity > 0
+      Number.isSafeInteger(item.quantity) && item.quantity > 0 && item.quantity <= MAX_CART_QUANTITY
     );
   } catch { return []; }
 }
 
 export function writeCart(items: CartItem[]) {
-  window.localStorage.setItem(CART_KEY, JSON.stringify(items));
+  const normalized = items
+    .filter((item) => item && typeof item.productId === "string" && item.productId.length > 0)
+    .map((item) => ({ ...item, quantity: Math.min(MAX_CART_QUANTITY, Math.max(1, Math.trunc(item.quantity))) }))
+    .filter((item) => Number.isSafeInteger(item.pricePaise) && item.pricePaise >= 0);
+  try {
+    window.localStorage.setItem(CART_KEY, JSON.stringify(normalized));
+  } catch {
+    // Keep the UI responsive if browser storage is disabled or full.
+  }
   window.dispatchEvent(new Event("vooye-cart-updated"));
 }
 
@@ -52,6 +61,10 @@ export default function AddToCartButton({ item }: { item: Omit<CartItem, "quanti
   function add() {
     const cart = readCart();
     const existing = cart.find((entry) => entry.productId === item.productId);
+    if (existing?.quantity >= MAX_CART_QUANTITY) {
+      setAdded(false);
+      return;
+    }
     if (existing) {
       writeCart(cart.map((entry) => entry.productId === item.productId
         ? { ...entry, quantity: entry.quantity + 1 } : entry));
@@ -86,7 +99,7 @@ export default function AddToCartButton({ item }: { item: Omit<CartItem, "quanti
         <div className="product-quantity-stepper" aria-label={`Quantity for ${item.name}`}>
           <button type="button" onClick={removeOne} aria-label={`Remove one ${item.name}`}>−</button>
           <output aria-live="polite">{quantity}</output>
-          <button type="button" onClick={add} aria-label={`Add one ${item.name}`}>+1</button>
+          <button type="button" onClick={add} aria-label={`Add one ${item.name}`} disabled={quantity >= MAX_CART_QUANTITY}>+1</button>
         </div>
       ) : (
         <button className="button" type="button" onClick={add} aria-label={`Add one ${item.name} to cart`}>
