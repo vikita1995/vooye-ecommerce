@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedProductBySlug } from "@/lib/catalog";
-import AddToCartButton from "@/components/add-to-cart";
+import ProductCardActions from "@/components/product-card-actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -88,15 +88,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
             Product availability and price are shown from the approved listing.
             Checkout is available only when the payment flow is enabled.
           </div>
-          <AddToCartButton
-            item={{
-              productId: product.id,
-              slug: product.slug,
-              name: product.name,
-              pricePaise: product.pricePaise,
-              imageUrl: product.imageUrl,
-            }}
-          />
+          <ProductCardActions item={{
+            productId: product.id,
+            slug: product.slug,
+            name: product.name,
+            pricePaise: product.pricePaise,
+            imageUrl: product.imageUrl,
+          }} />
           <p style={{ marginTop: 12 }}><Link href="/cart">View cart →</Link></p>
           <p className="muted"><Link href="/#shop">← Back to the collection</Link></p>
         </div>
