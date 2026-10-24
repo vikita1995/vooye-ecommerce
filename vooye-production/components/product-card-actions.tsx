@@ -49,7 +49,7 @@ export default function ProductCardActions({ item }: { item: ProductActionItem }
     } catch {}
     const existing = cart.find((entry) => entry.productId === item.productId);
     const next = existing
-      ? cart.map((entry) => entry.productId === item.productId ? { ...entry, quantity: Math.min((entry.quantity || 0) + 1, 99) } : entry)
+      ? cart.map((entry) => entry.productId === item.productId ? { ...entry, quantity: (entry.quantity || 0) + 1 } : entry)
       : [...cart, { ...item, quantity: 1 }];
     window.localStorage.setItem(key, JSON.stringify(next));
     window.dispatchEvent(new Event("vooye-cart-updated"));

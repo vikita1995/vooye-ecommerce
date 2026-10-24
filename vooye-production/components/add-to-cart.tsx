@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type CartItem = {
   productId: string;
@@ -33,17 +33,41 @@ export function writeCart(items: CartItem[]) {
 
 export default function AddToCartButton({ item }: { item: Omit<CartItem, "quantity"> }) {
   const [added, setAdded] = useState(false);
+  const [quantity, setQuantity] = useState(0);
+
+  const syncQuantity = useCallback(() => {
+    setQuantity(readCart().find((entry) => entry.productId === item.productId)?.quantity ?? 0);
+  }, [item.productId]);
+
+  useEffect(() => {
+    syncQuantity();
+    window.addEventListener("vooye-cart-updated", syncQuantity);
+    window.addEventListener("storage", syncQuantity);
+    return () => {
+      window.removeEventListener("vooye-cart-updated", syncQuantity);
+      window.removeEventListener("storage", syncQuantity);
+    };
+  }, [syncQuantity]);
+
   function add() {
     const cart = readCart();
     const existing = cart.find((entry) => entry.productId === item.productId);
     if (existing) {
       writeCart(cart.map((entry) => entry.productId === item.productId
-        ? { ...entry, quantity: Math.min(entry.quantity + 1, 99) } : entry));
+        ? { ...entry, quantity: entry.quantity + 1 } : entry));
     } else {
       writeCart([...cart, { ...item, quantity: 1 }]);
     }
+    setQuantity((current) => current + 1);
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1800);
   }
-  return <button className="button" type="button" onClick={add}>{added ? "Added to cart ✓" : "Add to cart"}</button>;
+  return (
+    <div className="add-to-cart-control">
+      <button className="button" type="button" onClick={add} aria-label={`Add one ${item.name} to cart`}>
+        {added ? "Added ✓ · +1 more" : quantity > 0 ? `Add +1 · ${quantity} in cart` : "Add to cart +1"}
+      </button>
+      {quantity > 0 && <span className="cart-quantity" aria-live="polite">Quantity: {quantity}</span>}
+    </div>
+  );
 }
