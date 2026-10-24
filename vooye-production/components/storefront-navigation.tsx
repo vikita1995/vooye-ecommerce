@@ -47,6 +47,7 @@ export default function StorefrontNavigation() {
         aria-label="Main navigation"
       >
         <Link href="/#shop" onClick={closeMenu}>Shop / Products</Link>
+        <Link href="/sign-in" onClick={closeMenu}>Sign in</Link>
         <Link href="/account/orders" onClick={closeMenu}>My orders</Link>
         <Link href="/cart" onClick={closeMenu}>Cart</Link>
         <a href="mailto:support@vooye.in" onClick={closeMenu}>Support / Contact</a>
