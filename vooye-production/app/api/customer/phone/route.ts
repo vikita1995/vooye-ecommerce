@@ -61,6 +61,21 @@ export async function PATCH(request: NextRequest) {
     const customerUrl =
       `${url}/rest/v1/customers?firebase_uid=eq.${encodeURIComponent(decoded.uid)}`;
 
+    // Check ownership before updating so a uniqueness conflict gives a useful,
+    // safe response instead of an opaque database error.
+    const phoneLookup = await fetch(
+      `${url}/rest/v1/customers?phone_e164=eq.${encodeURIComponent(requestedPhone)}&select=firebase_uid`,
+      { headers, cache: "no-store" }
+    );
+    if (!phoneLookup.ok) {
+      console.error("Phone ownership lookup failed:", phoneLookup.status);
+      return fail("Unable to verify phone-number availability. Please try again.", 502);
+    }
+    const phoneOwners = await phoneLookup.json() as { firebase_uid: string }[];
+    if (phoneOwners.some((owner) => owner.firebase_uid !== decoded.uid)) {
+      return fail("This phone number is already linked to another account.", 409);
+    }
+
     const lookup = await fetch(
       `${customerUrl}&select=id,status`,
       { headers, cache: "no-store" }
