@@ -1,0 +1,46 @@
+name: Vooye Seller Portal CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "seller-portal/**"
+      - ".github/workflows/seller-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "seller-portal/**"
+      - ".github/workflows/seller-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vooye-seller-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: seller-portal
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: example.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: vooye-ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: seller-portal/package.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build seller application
+        run: npm run build
