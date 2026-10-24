@@ -398,7 +398,7 @@ export default function CheckoutPage() {
                       <output aria-live="polite">{item.quantity}</output>
                       <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity + 1)} disabled={busy}>+1</button>
                     </div>
-                    <p style={{ marginTop: 8 }}><button type="button" className="text-link" onClick={() => updateCartQuantity(item.productId, 0)} disabled={busy}>Remove product</button></p>
+                    <p style={{ marginTop: 8 }}><button type="button" className="remove-product-button" onClick={() => updateCartQuantity(item.productId, 0)} disabled={busy} aria-label={`Remove ${item.name} from this order`}>Remove product</button></p>
                   </div>
                   <strong>{money(item.pricePaise * item.quantity)}</strong>
                 </div>
