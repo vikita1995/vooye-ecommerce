@@ -2,10 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
 import ProfileLink from "@/components/profile-link";
 
 export default function StorefrontNavigation() {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -47,8 +59,12 @@ export default function StorefrontNavigation() {
         aria-label="Main navigation"
       >
         <Link href="/#shop" onClick={closeMenu}>Shop / Products</Link>
-        <Link href="/sign-in" onClick={closeMenu}>Sign in</Link>
-        <Link href="/account/orders" onClick={closeMenu}>My orders</Link>
+        {authReady && (
+          <Link href={user ? "/account" : "/sign-in"} onClick={closeMenu}>
+            {user ? "My account" : "Sign in"}
+          </Link>
+        )}
+        {user && <Link href="/account/orders" onClick={closeMenu}>My orders</Link>}
         <Link href="/cart" onClick={closeMenu}>Cart</Link>
         <a href="mailto:support@vooye.in" onClick={closeMenu}>Support / Contact</a>
       </nav>
