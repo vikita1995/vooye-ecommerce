@@ -11,7 +11,12 @@ A consolidated Next.js App Router + TypeScript + Prisma/PostgreSQL starter for V
 - Docker/Cloud Run configuration, GitHub Actions CI/CD with Workload Identity Federation placeholders
 - Seed data, environment template, release checklist and tests
 
+## Seller portal separation
+
+The seller portal should become an independently built and deployed application while staying in this repository. See [Seller Portal Architecture](../docs/SELLER_PORTAL_ARCHITECTURE.md) for repository findings, authentication/data-contract blockers, and the staged rollout plan. The current `/seller` route is not yet a standalone portal; do not deploy a second copy of the storefront and treat it as the seller app.
+
 ## Important launch status
+
 This is a **production-oriented starter, not a verified live production deployment**. It cannot be declared ready for real customers until you configure real Firebase/Supabase/Razorpay/GCP values, run migrations, validate the Razorpay webhook and end-to-end checkout in test mode, complete legal/tax/shipping/refund policies, and run the release checklist. Never commit `.env` or service-account keys.
 
 ## Requirements
