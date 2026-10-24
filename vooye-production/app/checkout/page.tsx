@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
-import { readCart, writeCart, type CartItem } from "@/components/add-to-cart";
+import { MAX_CART_QUANTITY, readCart, writeCart, type CartItem } from "@/components/add-to-cart";
 
 type Address = {
   id: string;
@@ -89,9 +89,10 @@ export default function CheckoutPage() {
 
   function updateCartQuantity(productId: string, quantity: number) {
     const current = readCart();
-    const next = quantity <= 0
+    const safeQuantity = Math.min(MAX_CART_QUANTITY, Math.max(0, Math.trunc(quantity)));
+    const next = safeQuantity === 0
       ? current.filter((item) => item.productId !== productId)
-      : current.map((item) => item.productId === productId ? { ...item, quantity } : item);
+      : current.map((item) => item.productId === productId ? { ...item, quantity: safeQuantity } : item);
     writeCart(next);
     setItems(next);
   }
@@ -396,7 +397,7 @@ export default function CheckoutPage() {
                     <div className="quantity-stepper" aria-label={`Quantity for ${item.name}`}>
                       <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity - 1)} disabled={busy || item.quantity <= 1}>−</button>
                       <output aria-live="polite">{item.quantity}</output>
-                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity + 1)} disabled={busy}>+1</button>
+                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateCartQuantity(item.productId, item.quantity + 1)} disabled={busy || item.quantity >= MAX_CART_QUANTITY}>+1</button>
                     </div>
                     <p style={{ marginTop: 8 }}><button type="button" className="remove-product-button" onClick={() => updateCartQuantity(item.productId, 0)} disabled={busy} aria-label={`Remove ${item.name} from this order`}>Remove product</button></p>
                   </div>
