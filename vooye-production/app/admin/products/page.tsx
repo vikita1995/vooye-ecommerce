@@ -263,11 +263,12 @@ export default function AdminProductsPage() {
     <main className="wrap">
       <header className="top">
         <Link className="brand" href="/">VOOYE</Link>
-        <nav className="nav"><Link href="/">Storefront</Link><Link href="/cart">Cart</Link><Link href="/account">My account</Link></nav>
+        <nav className="nav"><Link href="/admin/seller-dashboard">Seller dashboard</Link><Link href="/">Storefront</Link><Link href="/cart">Cart</Link><Link href="/account">My account</Link></nav>
       </header>
       <section className="section">
         <div className="eyebrow">Official Vooye catalogue</div>
         <h1>Product manager</h1>
+        <p><Link className="text-link" href="/admin/seller-dashboard">Open seller dashboard →</Link></p>
         <p className="muted">Manage prices, stock, descriptions and product photos directly. Seller applications and seller portal are not used for this catalogue.</p>
         <p className="notice">New products are saved as drafts. Publishing makes them visible in the shop; checkout remains separately controlled.</p>
 
