@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { onAuthStateChanged, PhoneAuthProvider, RecaptchaVerifier, signOut as firebaseSignOut, updatePhoneNumber, type User } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
-import { normalizeE164Phone } from "@/lib/validation";
-import { createClient } from "@/lib/supabase/client";
 import StorefrontNavigation from "@/components/storefront-navigation";
 
 type Customer = {
