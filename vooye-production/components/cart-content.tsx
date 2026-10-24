@@ -50,7 +50,7 @@ export default function CartContent() {
                   <output aria-live="polite">{item.quantity}</output>
                   <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.productId, item.quantity + 1)}>+1</button>
                 </div>
-                <button className="text-link" type="button" onClick={() => updateQuantity(item.productId, 0)}>Remove</button>
+                <button className="remove-item-button" type="button" onClick={() => updateQuantity(item.productId, 0)} aria-label={`Remove ${item.name} from cart`}>Remove</button>
               </div>
               <p style={{ marginTop: 12 }}><strong>Line total: {money(item.pricePaise * item.quantity)}</strong></p>
             </div>
