@@ -21,10 +21,10 @@ export default function StorefrontNavigation() {
         <span className="menu-toggle-label">{open ? "Close" : "Menu"}</span>
       </button>
       <nav id="storefront-menu" className={`nav storefront-menu${open ? " is-open" : ""}`} aria-label="Main navigation">
-        <Link href="/#shop" onClick={() => setOpen(false)}>Shop</Link>
+        <Link href="/#shop" onClick={() => setOpen(false)}>Shop / Products</Link>
         <Link href="/account/orders" onClick={() => setOpen(false)}>My orders</Link>
         <Link href="/cart" onClick={() => setOpen(false)}>Cart</Link>
-        <span onClick={() => setOpen(false)}><ProfileLink /></span>
+        <a href="mailto:support@vooye.in" onClick={() => setOpen(false)}>Support / Contact</a>
       </nav>
     </div>
   );
