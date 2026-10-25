@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authenticate } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { authenticateSupabaseRequest } from "@/lib/supabase/verify-token";
+import { commerceRpc } from "@/lib/commerce-rest";
 import { razorpayClient } from "@/lib/razorpay";
 import { isValidIndianPin, normalizeE164Phone } from "@/lib/validation";
 import { isCheckoutReady } from "@/lib/checkout-config";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   items: z.array(z.object({
-    productId: z.string().trim().min(1),
+    productId: z.string().trim().uuid(),
     quantity: z.number().int().min(1).max(10),
   })).min(1).max(30),
   shipping: z.object({
@@ -28,46 +28,16 @@ const bodySchema = z.object({
   }),
 });
 
+type CreatedOrder = {
+  order_id: string;
+  order_number: string;
+  amount_paise: number;
+  currency: string;
+  expires_at: string;
+};
+
 function fail(message: string, status: number) {
   return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
-}
-
-function sha256(value: unknown) {
-  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-async function releaseReservation(orderId: string, reason: string) {
-  await db.$transaction(async (tx) => {
-    const cancelled = await tx.order.updateMany({
-      where: { id: orderId, status: "PENDING_PAYMENT", paymentStatus: "CREATED" },
-      data: { status: "CANCELLED", paymentStatus: "FAILED" },
-    });
-    if (cancelled.count !== 1) return;
-
-    const releasedKey = "inventory_released:" + orderId;
-    const alreadyReleased = await tx.paymentEvent.findUnique({ where: { providerEventId: releasedKey } });
-    if (alreadyReleased) return;
-
-    const reservation = await tx.paymentEvent.findUnique({ where: { providerEventId: "inventory_reserved:" + orderId } });
-    if (reservation) {
-      const items = await tx.orderItem.findMany({ where: { orderId } });
-      for (const item of items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-    }
-
-    await tx.paymentEvent.create({
-      data: {
-        orderId,
-        providerEventId: releasedKey,
-        eventType: reservation ? "inventory.released." + reason : "inventory.release_skipped_unreserved." + reason,
-        payloadHash: sha256({ orderId, reason, hadReservation: Boolean(reservation) }),
-      },
-    });
-  });
 }
 
 export async function POST(request: Request) {
@@ -76,163 +46,92 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await authenticate(request);
+    const identity = await authenticateSupabaseRequest(request);
+    let input: unknown;
+    try { input = await request.json(); }
+    catch { return fail("Invalid checkout request body.", 400); }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return fail("Invalid checkout request body.", 400);
-    }
+    const parsed = bodySchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message || "Invalid checkout details.", 400);
+    if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) return fail("Razorpay checkout is not configured.", 503);
 
-    const parsed = bodySchema.safeParse(body);
-    if (!parsed.success) {
-      return fail(parsed.error.issues[0]?.message || "Invalid checkout details.", 400);
-    }
+    const allowedPins = (process.env.SERVICEABLE_PIN_CODES ?? "")
+      .split(",").map((value) => value.trim()).filter((value) => isValidIndianPin(value));
+    if (allowedPins.length === 0) return fail("Shipping serviceability is not configured. Please contact support.", 503);
+    if (!allowedPins.includes(parsed.data.shipping.postalCode)) return fail("Vooye cannot currently deliver to this PIN code.", 422);
 
-    if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
-      return fail("Razorpay checkout is not configured.", 503);
-    }
+    const shippingFee = Number(process.env.SHIPPING_FLAT_FEE_PAISE);
+    if (!Number.isSafeInteger(shippingFee) || shippingFee < 0) return fail("Shipping is not configured. Please try again later.", 503);
 
-    const serviceablePinCodes = (process.env.SERVICEABLE_PIN_CODES ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => isValidIndianPin(value));
-    if (serviceablePinCodes.length === 0) {
-      return fail("Shipping serviceability is not configured. Please contact support.", 503);
-    }
-    if (!serviceablePinCodes.includes(parsed.data.shipping.postalCode)) {
-      return fail("Vooye cannot currently deliver to this PIN code.", 422);
-    }
+    const merged = new Map<string, number>();
+    for (const item of parsed.data.items) merged.set(item.productId, (merged.get(item.productId) ?? 0) + item.quantity);
+    if ([...merged.values()].some((quantity) => quantity > 10)) return fail("Maximum quantity per product is 10.", 400);
+    const items = [...merged.entries()].map(([productId, quantity]) => ({ productId, quantity }));
 
-    const shippingPaise = Number(process.env.SHIPPING_FLAT_FEE_PAISE);
-    if (!Number.isSafeInteger(shippingPaise) || shippingPaise < 0) {
-      return fail("Shipping is not configured. Please try again later.", 503);
-    }
-
-    // Reserve stock atomically before creating a provider order. This protects
-    // against concurrent buyers. The reservation event also makes release
-    // operations idempotent without a new schema column.
-    const order = await db.$transaction(async (tx) => {
-      const lines: {
-        productId: string;
-        sellerId: string;
-        productName: string;
-        unitPricePaise: number;
-        quantity: number;
-        lineTotalPaise: number;
-      }[] = [];
-      let subtotalPaise = 0;
-
-      for (const requested of parsed.data.items) {
-        const product = await tx.product.findFirst({
-          where: {
-            id: requested.productId,
-            status: "ACTIVE",
-            stock: { gte: requested.quantity },
-            seller: { status: "APPROVED" },
-          },
-          select: {
-            id: true,
-            sellerId: true,
-            name: true,
-            pricePaise: true,
-          },
-        });
-        if (!product) throw new Error("INSUFFICIENT_STOCK");
-
-        const changed = await tx.product.updateMany({
-          where: {
-            id: product.id,
-            status: "ACTIVE",
-            stock: { gte: requested.quantity },
-            pricePaise: product.pricePaise,
-            seller: { status: "APPROVED" },
-          },
-          data: { stock: { decrement: requested.quantity } },
-        });
-        if (changed.count !== 1) throw new Error("INSUFFICIENT_STOCK");
-
-        const lineTotalPaise = product.pricePaise * requested.quantity;
-        if (!Number.isSafeInteger(lineTotalPaise)) throw new Error("INVALID_ORDER_TOTAL");
-        subtotalPaise += lineTotalPaise;
-        lines.push({
-          productId: product.id,
-          sellerId: product.sellerId,
-          productName: product.name,
-          unitPricePaise: product.pricePaise,
-          quantity: requested.quantity,
-          lineTotalPaise,
-        });
-      }
-
-      const totalPaise = subtotalPaise + shippingPaise;
-      if (!Number.isSafeInteger(totalPaise) || totalPaise < 1) throw new Error("INVALID_ORDER_TOTAL");
-
-      const created = await tx.order.create({
-        data: {
-          orderNumber: "VOO-" + Date.now() + "-" + crypto.randomUUID().slice(0, 6).toUpperCase(),
-          userId: user.id,
-          subtotalPaise,
-          shippingPaise,
-          totalPaise,
-          status: "PENDING_PAYMENT",
-          paymentStatus: "CREATED",
-          paymentExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          shippingName: parsed.data.shipping.name,
-          shippingPhone: parsed.data.shipping.phone,
-          shippingAddress1: parsed.data.shipping.address1,
-          shippingAddress2: parsed.data.shipping.address2 || null,
-          shippingCity: parsed.data.shipping.city,
-          shippingState: parsed.data.shipping.state,
-          shippingPostalCode: parsed.data.shipping.postalCode,
-          items: { create: lines },
-        },
-      });
-
-      await tx.paymentEvent.create({
-        data: {
-          orderId: created.id,
-          providerEventId: "inventory_reserved:" + created.id,
-          eventType: "inventory.reserved",
-          payloadHash: sha256(lines),
-        },
-      });
-      return created;
+    const order = await commerceRpc<CreatedOrder>("create_checkout_order", {
+      p_firebase_uid: identity.uid,
+      p_items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+      p_shipping: {
+        name: parsed.data.shipping.name,
+        phone: parsed.data.shipping.phone,
+        address1: parsed.data.shipping.address1,
+        address2: parsed.data.shipping.address2 ?? "",
+        city: parsed.data.shipping.city,
+        state: parsed.data.shipping.state,
+        postalCode: parsed.data.shipping.postalCode,
+      },
+      p_shipping_fee_paise: shippingFee,
     });
 
     try {
       const razorpayOrder = await razorpayClient().orders.create({
-        amount: order.totalPaise,
+        amount: order.amount_paise,
         currency: order.currency,
-        receipt: order.orderNumber,
-        notes: { internalOrderId: order.id },
+        receipt: order.order_number,
+        notes: { internalOrderId: order.order_id },
       });
-      await db.order.update({
-        where: { id: order.id },
-        data: { razorpayOrderId: razorpayOrder.id },
+      const attached = await commerceRpc<boolean>("attach_razorpay_order", {
+        p_order_id: order.order_id,
+        p_firebase_uid: identity.uid,
+        p_provider_order_id: razorpayOrder.id,
       });
+      if (!attached) {
+        // Leave the payment closed for reconciliation rather than return an unusable provider order.
+        console.error("Razorpay order created but could not be attached", { internalOrderId: order.order_id });
+        return fail("Unable to confirm checkout setup. Please contact support before retrying.", 503);
+      }
 
       return NextResponse.json({
-        orderId: order.id,
+        orderId: order.order_id,
+        orderNumber: order.order_number,
         razorpayOrderId: razorpayOrder.id,
-        amount: order.totalPaise,
+        amount: order.amount_paise,
         currency: order.currency,
         keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       }, { status: 201, headers: { "Cache-Control": "no-store" } });
-    } catch {
-      await releaseReservation(order.id, "provider_order_creation_failed");
-      return fail("Unable to start Razorpay checkout. Please try again.", 503);
+    } catch (cause) {
+      try {
+        await commerceRpc<boolean>("cancel_unpaid_checkout_order", {
+          p_order_id: order.order_id,
+          p_firebase_uid: identity.uid,
+          p_reason: "provider_order_creation_failed",
+        });
+      } catch (releaseError) {
+        console.error("Unable to release failed checkout reservation", {
+          internalOrderId: order.order_id,
+          reason: releaseError instanceof Error ? releaseError.message : "unknown",
+        });
+      }
+      throw cause;
     }
   } catch (cause) {
     const code = cause instanceof Error ? cause.message : "";
-    if (code === "Authentication required" || code === "Authentication invalid or expired" || code === "AUTH_REQUIRED" || code === "AUTH_INVALID") {
-      return fail("Please sign in before checkout.", 401);
-    }
-    if (code === "Forbidden") return fail("You are not allowed to start this checkout.", 403);
-    if (code === "INSUFFICIENT_STOCK") return fail("One or more items no longer have enough stock.", 409);
-    if (code === "INVALID_ORDER_TOTAL") return fail("The order total is invalid.", 400);
-    console.error("Razorpay order creation failed:", code || "Unknown error");
+    if (["AUTH_REQUIRED", "AUTH_INVALID"].includes(code)) return fail("Please sign in before checkout.", 401);
+    if (code === "SUPABASE_CONFIG_MISSING") return fail("Checkout service is not configured.", 503);
+    if (["INSUFFICIENT_STOCK", "P0001"].includes(code)) return fail("One or more items no longer have enough stock or are unavailable.", 409);
+    if (["CUSTOMER_NOT_FOUND", "P0002"].includes(code)) return fail("Your customer profile is not ready for checkout. Please update your profile.", 409);
+    if (["INVALID_ITEMS", "INVALID_ITEM", "INVALID_QUANTITY", "DUPLICATE_PRODUCT", "INVALID_ORDER_TOTAL", "INVALID_SHIPPING_FEE"].includes(code)) return fail("Checkout details are invalid. Please review your cart and shipping information.", 400);
+    console.error("Supabase Razorpay order creation failed:", code || "Unknown error");
     return fail("Unable to start checkout. Please try again.", 500);
   }
 }
