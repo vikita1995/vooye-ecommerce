@@ -90,6 +90,22 @@ export async function GET(request: NextRequest) {
     const total = Number(totalMatch[1]);
 
     const customerIds = rows.map((row) => row.id);
+    const orderCounts = new Map<string, number>();
+    if (customerIds.length) {
+      const ordersDb = supabaseRest("orders");
+      const countResults = await Promise.all(rows.map(async (customer) => {
+        const countQuery = new URLSearchParams({ select: "id", customer_id: `eq.${customer.id}`, limit: "1" });
+        const countResponse = await requestDb(`${ordersDb.url}?${countQuery.toString()}`, {
+          headers: { ...ordersDb.headers, Prefer: "count=exact", Range: "0-0" },
+        });
+        if (!countResponse.ok) throw new Error("CUSTOMER_ORDER_COUNT_FAILED");
+        const range = countResponse.headers.get("content-range") ?? "";
+        const match = range.match(/\\/(\\d+|\\*)$/);
+        if (!match || match[1] === "*") throw new Error("CUSTOMER_ORDER_COUNT_FAILED");
+        return [customer.id, Number(match[1])] as const;
+      }));
+      for (const [customerId, count] of countResults) orderCounts.set(customerId, count);
+    }
     let orders: OrderRow[] = [];
     let payments: PaymentRow[] = [];
     if (customerIds.length) {
@@ -145,7 +161,7 @@ export async function GET(request: NextRequest) {
       accountStatus: customer.status,
       registeredAt: customer.created_at,
       updatedAt: customer.updated_at,
-      orderCount: orders.filter((order) => order.customer_id === customer.id).length,
+      orderCount: orderCounts.get(customer.id) ?? 0,
       recentOrders: (ordersByCustomer.get(customer.id) ?? []).map((order) => ({
         id: order.id,
         orderNumber: order.order_number,
