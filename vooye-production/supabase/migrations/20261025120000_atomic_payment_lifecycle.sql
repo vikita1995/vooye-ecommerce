@@ -193,26 +193,22 @@ begin
     raise exception 'INVALID_EXPIRY_LIMIT' using errcode = '22023';
   end if;
 
-  for v_order in
-    select o.*
-    from public.orders o
-    where o.status = 'pending'
-      and exists (
-        select 1 from public.payment_transactions pt
-        where pt.order_id = o.id
-          and pt.provider = 'razorpay'
-          and pt.status = 'pending'
-          and coalesce((pt.provider_metadata->>'expires_at')::timestamptz, pt.created_at + interval '15 minutes') <= now()
-      )
-    order by o.created_at
+  -- Lock payment rows first, matching webhook processing's lock order.
+  for v_payment in
+    select pt.*
+    from public.payment_transactions pt
+    where pt.provider = 'razorpay'
+      and pt.status = 'pending'
+      and coalesce((pt.provider_metadata->>'expires_at')::timestamptz, pt.created_at + interval '15 minutes') <= now()
+    order by pt.created_at
     for update skip locked
     limit p_limit
   loop
-    select pt.* into v_payment
-    from public.payment_transactions pt
-    where pt.order_id = v_order.id and pt.provider = 'razorpay'
+    select o.* into v_order
+    from public.orders o
+    where o.id = v_payment.order_id
     for update;
-    if not found or v_payment.status <> 'pending' then
+    if not found or v_order.status <> 'pending' then
       v_skipped := v_skipped + 1;
       continue;
     end if;
@@ -244,6 +240,11 @@ begin
           'expired_at', now()),
         updated_at = now()
     where id = v_payment.id and status = 'pending';
+
+    if not found then
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
 
     update public.orders set status = 'cancelled', updated_at = now()
     where id = v_order.id and status = 'pending';
