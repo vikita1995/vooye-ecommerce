@@ -46,3 +46,8 @@ A new explicit environment gate, `SUPABASE_COMMERCE_CHECKOUT_READY=true`, is req
 ## Data preservation
 
 No production rows were modified during this inspection. Do not drop tables, truncate records, rewrite customer IDs, or run `prisma migrate deploy` against production as part of this remediation. Before any future migration, take a verified backup and review the exact SQL and rollback plan.
+
+
+## PR implementation slice: order creation and history
+
+The next PR adds a reviewed SQL migration defining atomic checkout creation, Razorpay-order attachment, and failed-checkout cancellation/release functions against the existing tables. It also routes the checkout-order endpoint and customer order-history endpoint through the Supabase service-role REST API. The migration is repository-only and must be applied to staging first; it has not been applied to production. Payment verification, webhook state transitions, and scheduled expiry remain a separate required follow-up and checkout stays disabled.
