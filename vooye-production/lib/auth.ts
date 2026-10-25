@@ -88,11 +88,38 @@ export function requireRole(user: User, roles: UserRole[]): void {
   if (!roles.includes(user.role)) throw new Error("Forbidden");
 }
 
-/** Admin access is granted only by an explicit Firebase UID allowlist or trusted Prisma role. */
-export async function requireAdmin(request: Request): Promise<User> {
-  const user = await authenticate(request);
-  if (!isAdminUid(user.firebaseUid) && user.role !== "ADMIN") {
-    throw new Error("Forbidden");
+/**
+ * Admin access is granted by the explicit Firebase UID allowlist first.
+ * This avoids requiring a Prisma User row for allowlisted administrators, which
+ * is important while customer profiles are stored in Supabase and the legacy
+ * Prisma User table may not exist in a deployed database.
+ *
+ * Non-allowlisted admins may still be authorized through a persisted Prisma role.
+ */
+export type AdminPrincipal = Pick<User, "firebaseUid" | "email" | "role">;
+
+export async function requireAdmin(request: Request): Promise<AdminPrincipal> {
+  let identity: VerifiedSupabaseUser;
+  try {
+    identity = await authenticateSupabaseRequest(request);
+  } catch (cause) {
+    const code = cause instanceof Error ? cause.message : "";
+    if (code === "AUTH_REQUIRED") throw new Error("Authentication required");
+    if (code === "AUTH_INVALID") throw new Error("Authentication invalid or expired");
+    throw cause;
   }
+
+  if (isAdminUid(identity.uid)) {
+    return {
+      firebaseUid: identity.uid,
+      email: identity.email?.trim().toLowerCase() || `phone+${identity.uid}@users.vooye.invalid`,
+      role: "ADMIN",
+    };
+  }
+
+  // Preserve role-based access for accounts not explicitly allowlisted.
+  // Do not create a customer record as a side effect of an admin authorization check.
+  const user = await db.user.findUnique({ where: { firebaseUid: identity.uid } });
+  if (!user || user.role !== "ADMIN") throw new Error("Forbidden");
   return user;
 }
