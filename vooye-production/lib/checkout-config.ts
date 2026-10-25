@@ -1,6 +1,13 @@
 import { isValidIndianPin } from "@/lib/validation";
 
+/**
+ * Checkout remains closed until the Supabase-backed commerce persistence path
+ * has been implemented and verified end-to-end. The additional explicit
+ * release gate prevents legacy Prisma configuration flags from accidentally
+ * enabling checkout while the application still has split data models.
+ */
 export function isCheckoutReady(): boolean {
+  if (process.env.SUPABASE_COMMERCE_CHECKOUT_READY !== "true") return false;
   if (process.env.CHECKOUT_ENABLED !== "true") return false;
   if (process.env.INVENTORY_EXPIRY_JOB_ENABLED !== "true") return false;
   if (process.env.PAYMENT_RECONCILIATION_ENABLED !== "true") return false;
