@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
         });
         if (!countResponse.ok) throw new Error("CUSTOMER_ORDER_COUNT_FAILED");
         const range = countResponse.headers.get("content-range") ?? "";
-        const match = range.match(/\\/(\\d+|\\*)$/);
+        const match = range.match(/\/(\d+|\*)$/);
         if (!match || match[1] === "*") throw new Error("CUSTOMER_ORDER_COUNT_FAILED");
         return [customer.id, Number(match[1])] as const;
       }));
