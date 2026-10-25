@@ -29,6 +29,7 @@ Create Secret Manager secrets for:
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
 - `SHIPPING_FLAT_FEE_PAISE`
+- `SUPABASE_COMMERCE_CHECKOUT_READY` (must remain `false` until the Supabase-backed order/payment path and staging tests are complete)
 - `CHECKOUT_ENABLED`
 - `INVENTORY_EXPIRY_JOB_ENABLED`
 - `PAYMENT_RECONCILIATION_ENABLED`
@@ -56,8 +57,9 @@ Enable Firebase Authentication providers you intend to support. Add your product
 - Late captures after expiry and inventory/payment mismatches require a support/refund reconciliation workflow; do not enable live payments until that workflow is tested.
 
 ## Checkout feature gate
-- Checkout requires all of `CHECKOUT_ENABLED=true`, `INVENTORY_EXPIRY_JOB_ENABLED=true`, `PAYMENT_RECONCILIATION_ENABLED=true`, configured Razorpay credentials, a valid flat shipping fee, a non-empty exact `SERVICEABLE_PIN_CODES` allowlist, and `CRON_SECRET`. The status API `GET /api/checkout/status` reports only whether the gate is open; it never reveals missing secret names or values.
+- Checkout requires all of `SUPABASE_COMMERCE_CHECKOUT_READY=true`, `CHECKOUT_ENABLED=true`, `INVENTORY_EXPIRY_JOB_ENABLED=true`, `PAYMENT_RECONCILIATION_ENABLED=true`, configured Razorpay credentials, a valid flat shipping fee, a non-empty exact `SERVICEABLE_PIN_CODES` allowlist, and `CRON_SECRET`. The status API `GET /api/checkout/status` reports only whether the gate is open; it never reveals missing secret names or values.
 - Keep these flags false until each related operational dependency is deployed and verified. A feature flag is not a replacement for testing.
+- `SUPABASE_COMMERCE_CHECKOUT_READY` must remain `false` (or unset) until the Prisma-backed order/payment routes have been migrated to the canonical Supabase commerce schema and staging tests pass. This extra gate is intentionally not wired to a production deployment variable.
 - `CHECKOUT_ENABLED` must remain `false` (or unset) until payment verification, inventory reservation/release, shipping, refund/reconciliation, and deployment secret bindings have been tested.
 - The order API returns HTTP 503 unless `CHECKOUT_ENABLED=true` is explicitly set in the Cloud Run runtime environment. Do not enable it only to make the button appear.
 - Use Razorpay test mode with a non-production checkout deployment first. Live keys should be enabled only after the full go-live checklist passes.
