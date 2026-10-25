@@ -213,7 +213,7 @@ declare
   v_updated integer;
   v_item record;
 begin
-  select o.*, c.id into v_order, v_customer_id
+  select o.* into v_order
   from public.orders o
   join public.customers c on c.id = o.customer_id
   where o.id = p_order_id and c.firebase_uid = p_firebase_uid
