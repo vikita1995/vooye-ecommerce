@@ -11,7 +11,7 @@ function fail(message: string, status: number) {
 
 function authorized(request: Request) {
   const expected = process.env.CRON_SECRET ?? "";
-  const provided = request.headers.get("authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1]?.trim() ?? "";
+  const provided = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
   if (!expected || !provided) return false;
   const left = Buffer.from(expected);
   const right = Buffer.from(provided);
