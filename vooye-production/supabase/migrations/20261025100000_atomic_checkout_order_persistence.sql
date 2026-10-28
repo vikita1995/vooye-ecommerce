@@ -206,7 +206,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   v_order public.orders%rowtype;
   v_payment public.payment_transactions%rowtype;
@@ -290,7 +290,7 @@ begin
 
   return true;
 end;
-$;
+$$;
 
 revoke all on function public.create_checkout_order(text,jsonb,jsonb,integer) from public, anon, authenticated;
 revoke all on function public.attach_razorpay_order(uuid,text,text) from public, anon, authenticated;
