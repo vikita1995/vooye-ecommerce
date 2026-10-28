@@ -65,11 +65,19 @@ export default async function Home() {
             <span><b>02</b> Made for your home</span>
           </div>
         </div>
-        <div className="hero-art" aria-label="Decorative mirror illustration">
-          <div className="hero-sun" />
-          <div className="hero-plant plant-left" aria-hidden="true">⌁</div>
-          <div className="mirror"><span className="mirror-shine" /></div>
-          <div className="hero-art-label"><span>THE REFLECTION EDIT</span><span>01 / VOOYE</span></div>
+        <div className="hero-art hero-art-photo" role="img" aria-label="Gold arched full-length mirror styled for a warm, modern home">
+          <img
+            className="hero-lifestyle-image"
+            src="https://cpoitylvklkcrclsaxem.supabase.co/storage/v1/object/public/vooye-products/products/arched-gold-floor-mirror/01-front-angle.jpeg"
+            alt=""
+            fetchPriority="high"
+          />
+          <div className="hero-photo-wash" aria-hidden="true" />
+          <div className="hero-photo-note">
+            <span className="hero-photo-kicker">THE REFLECTION EDIT</span>
+            <span className="hero-photo-title">A little more you.</span>
+            <span className="hero-photo-index">VOOYE · HOME, REFRAMED</span>
+          </div>
         </div>
       </section>
 
