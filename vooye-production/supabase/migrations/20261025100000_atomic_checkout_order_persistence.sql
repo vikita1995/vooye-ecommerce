@@ -123,11 +123,11 @@ begin
 
   insert into public.orders (
     order_number, customer_id, status, currency, subtotal, shipping_amount,
-    discount_amount, tax_amount, total_amount, shipping_address_snapshot, placed_at
+    discount_amount, tax_amount, total_amount, billing_address_snapshot, shipping_address_snapshot, placed_at
   ) values (
     v_order_number, v_customer.id, 'pending', 'INR',
     v_subtotal_paise::numeric / 100, p_shipping_fee_paise::numeric / 100,
-    0, 0, v_total_paise::numeric / 100, v_shipping, v_now
+    0, 0, v_total_paise::numeric / 100, v_shipping, v_shipping, v_now
   ) returning id into v_order_id;
 
   for v_item in select value from jsonb_array_elements(v_lines)
