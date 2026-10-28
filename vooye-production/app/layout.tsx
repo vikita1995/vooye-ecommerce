@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./vooye-refresh.css";
 
 export const metadata: Metadata = {
   title: "Vooye — Mirrors & Home Décor",

@@ -1,0 +1,124 @@
+/* VOOYE premium storefront system — additive overrides, no commerce logic changes. */
+:root {
+  --vooye-ivory: #faf7f1;
+  --vooye-sand: #e9dfd2;
+  --vooye-gold: #a98255;
+  --vooye-espresso: #29251f;
+  --vooye-olive: #e4e7df;
+  --vooye-radius: 3px;
+  --vooye-shadow: 0 18px 44px rgb(48 34 22 / 8%);
+}
+
+html { scroll-padding-top: 24px; }
+body { text-rendering: optimizeLegibility; }
+img { max-width: 100%; }
+::selection { background: #ddc7ad; color: #29251f; }
+
+/* Real product photography makes the home hero feel like a shoppable brand. */
+.hero-art-photo {
+  isolation: isolate;
+  display: block;
+  min-height: 0;
+  aspect-ratio: 4 / 4.65;
+  background: #e4d4c1;
+}
+.hero-art-photo::before { z-index: 2; }
+.hero-lifestyle-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 38%;
+  transition: transform 800ms cubic-bezier(.2,.65,.3,1);
+}
+.hero-art-photo:hover .hero-lifestyle-image { transform: scale(1.025); }
+.hero-photo-wash {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(31 25 18 / 0%) 38%, rgb(31 25 18 / 58%) 100%);
+}
+.hero-photo-note {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 28px;
+  left: 28px;
+  display: grid;
+  gap: 8px;
+  color: #fffaf3;
+}
+.hero-photo-kicker, .hero-photo-index {
+  font-size: 9px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.hero-photo-title {
+  font: italic 400 clamp(28px, 3.5vw, 46px)/1.05 Georgia, "Times New Roman", serif;
+  letter-spacing: -.025em;
+}
+.hero-photo-index { opacity: .8; }
+
+/* Shared page surfaces: product, account, cart, checkout, seller and admin. */
+.panel, .empty, .audience-card {
+  border-radius: var(--vooye-radius);
+}
+.panel {
+  box-shadow: 0 8px 28px rgb(48 34 22 / 4%);
+}
+.field input, .field textarea, .field select,
+input:not([type="checkbox"]):not([type="radio"]),
+textarea, select {
+  border-radius: var(--vooye-radius);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.field input:focus, .field textarea:focus, .field select:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus, select:focus {
+  border-color: var(--vooye-gold);
+  box-shadow: 0 0 0 3px rgb(169 130 85 / 15%);
+}
+button, .button {
+  min-height: 42px;
+}
+button:disabled { transform: none; box-shadow: none; }
+.notice {
+  border-left: 3px solid var(--vooye-gold);
+  border-radius: 0 var(--vooye-radius) var(--vooye-radius) 0;
+}
+.table th {
+  color: #6e5a45;
+  background: #f2ece3;
+  font-weight: 600;
+}
+.table tr:hover td { background: rgb(233 223 210 / 28%); }
+.badge { border-radius: 2px; }
+.product-image { background-color: #eee5d8; }
+.product-card-actions > button, .product-card-actions > a {
+  border-radius: var(--vooye-radius);
+}
+.product-card-actions .buy-now-button { background: var(--vooye-gold); }
+.product-card-actions .buy-now-button:hover { background: #89633d; }
+
+/* Product and editorial layouts scale without squeezing the copy. */
+@media (min-width: 1100px) {
+  .hero-art-photo { max-height: 620px; }
+}
+@media (max-width: 900px) {
+  .hero-art-photo { aspect-ratio: 5 / 4; }
+}
+@media (max-width: 650px) {
+  .hero-art-photo { aspect-ratio: 4 / 4.25; min-height: 0; }
+  .hero-photo-note { right: 20px; bottom: 20px; left: 20px; }
+  .hero-photo-title { font-size: clamp(30px, 9vw, 42px); }
+  .hero-photo-kicker, .hero-photo-index { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
