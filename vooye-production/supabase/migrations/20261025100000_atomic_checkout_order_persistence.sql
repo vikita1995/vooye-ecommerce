@@ -206,43 +206,91 @@ returns boolean
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $
 declare
   v_order public.orders%rowtype;
-  v_customer_id uuid;
+  v_payment public.payment_transactions%rowtype;
   v_updated integer;
   v_item record;
+  v_metadata jsonb;
 begin
+  -- Use the same lock order as webhook and expiry processing: payment, then order.
+  select pt.* into v_payment
+  from public.payment_transactions pt
+  where pt.order_id = p_order_id
+    and pt.provider = 'razorpay'
+  for update;
+  if not found then return false; end if;
+
   select o.* into v_order
   from public.orders o
   join public.customers c on c.id = o.customer_id
-  where o.id = p_order_id and c.firebase_uid = p_firebase_uid
+  where o.id = p_order_id
+    and c.firebase_uid = p_firebase_uid
   for update of o;
   if not found then return false; end if;
-  if v_order.status <> 'pending' then return false; end if;
+
+  -- Re-check state only after both rows are locked.
+  if v_order.status <> 'pending' or v_payment.status <> 'pending' then
+    return false;
+  end if;
+
+  v_metadata := coalesce(v_payment.provider_metadata, '{}'::jsonb);
+
+  -- The payment lock serializes cancellation against webhook/expiry. The marker
+  -- ensures inventory is restored at most once for this payment transaction.
+  if coalesce((v_metadata->>'inventory_released')::boolean, false) = false then
+    for v_item in
+      select oi.product_id, sum(oi.quantity)::integer as quantity
+      from public.order_items oi
+      where oi.order_id = p_order_id
+      group by oi.product_id
+      order by oi.product_id
+    loop
+      update public.products
+      set stock = stock + v_item.quantity,
+          updated_at = now()
+      where id::text = v_item.product_id;
+
+      if not found then
+        raise exception 'PRODUCT_MISSING_DURING_STOCK_RELEASE' using errcode = 'P0002';
+      end if;
+    end loop;
+
+    v_metadata := v_metadata || jsonb_build_object(
+      'inventory_released', true,
+      'inventory_release_reason', 'checkout_cancelled'
+    );
+  end if;
 
   update public.payment_transactions
-    set status = 'failed',
-        provider_metadata = coalesce(provider_metadata, '{}'::jsonb) ||
-          jsonb_build_object('checkout_state','cancelled','cancel_reason',left(coalesce(p_reason,'unknown'),80)),
-        updated_at = now()
-    where order_id = p_order_id and status = 'pending';
+  set status = 'failed',
+      provider_metadata = v_metadata || jsonb_build_object(
+        'checkout_state', 'cancelled',
+        'cancel_reason', left(coalesce(p_reason, 'unknown'), 80)
+      ),
+      updated_at = now()
+  where id = v_payment.id
+    and status = 'pending';
 
   get diagnostics v_updated = row_count;
-  if v_updated <> 1 then return false; end if;
+  if v_updated <> 1 then
+    raise exception 'PAYMENT_STATE_RACE' using errcode = '40001';
+  end if;
 
-  for v_item in select product_id, quantity from public.order_items where order_id = p_order_id
-  loop
-    update public.products
-      set stock = stock + v_item.quantity, updated_at = now()
-      where id::text = v_item.product_id;
-  end loop;
+  update public.orders
+  set status = 'cancelled',
+      updated_at = now()
+  where id = p_order_id
+    and status = 'pending';
 
-  update public.orders set status = 'cancelled', updated_at = now()
-    where id = p_order_id and status = 'pending';
-  return found;
+  if not found then
+    raise exception 'ORDER_STATE_RACE' using errcode = '40001';
+  end if;
+
+  return true;
 end;
-$$;
+$;
 
 revoke all on function public.create_checkout_order(text,jsonb,jsonb,integer) from public, anon, authenticated;
 revoke all on function public.attach_razorpay_order(uuid,text,text) from public, anon, authenticated;
