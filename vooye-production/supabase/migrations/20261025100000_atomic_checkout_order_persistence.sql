@@ -209,10 +209,20 @@ set search_path = public, pg_temp
 as $$
 declare
   v_order public.orders%rowtype;
-  v_customer_id uuid;
+  v_payment public.payment_transactions%rowtype;
   v_updated integer;
   v_item record;
 begin
+  -- Match the payment -> order lock order used by webhook and expiry RPCs.
+  -- This avoids a payment/order row-lock inversion during concurrent callbacks.
+  select pt.* into v_payment
+  from public.payment_transactions pt
+  where pt.order_id = p_order_id
+    and pt.provider = 'razorpay'
+    and pt.status = 'pending'
+  for update;
+  if not found then return false; end if;
+
   select o.* into v_order
   from public.orders o
   join public.customers c on c.id = o.customer_id
